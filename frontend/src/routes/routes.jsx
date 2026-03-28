@@ -95,7 +95,7 @@ export const routes = [
     element: <ScannerPage />,
     seo: {
       title: "Is This Chrome Extension Safe? Free Extension Risk Check | ExtensionShield",
-      description: "Free extension risk check by URL or ID. Get risk score, permissions, privacy and governance signals. See if a Chrome extension is safe before you install.",
+      description: "Free extension risk check by Chrome Web Store URL. Get risk score, permissions, privacy and governance signals. See if a Chrome extension is safe before you install.",
       canonical: "/scan"
     },
     priority: 0.9,

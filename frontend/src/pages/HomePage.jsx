@@ -147,10 +147,10 @@ const HomePage = () => {
     "applicationCategory": "SecurityApplication",
     "operatingSystem": "Web",
     "offers": [
-      { "@type": "Offer", "price": "0", "priceCurrency": "USD", "description": "Free public extension scan by URL or ID" },
+      { "@type": "Offer", "price": "0", "priceCurrency": "USD", "description": "Free public extension scan by Chrome Web Store URL" },
       { "@type": "Offer", "description": "Pro: private CRX/ZIP security audit and vulnerability scan" }
     ],
-    "description": "Chrome extension security scanner. Scan by URL/ID for free. Upload private CRX/ZIP for pre-release security audit, vulnerability scanning, and fix suggestions.",
+    "description": "Chrome extension security scanner. Scan by Chrome Web Store URL for free. Upload private CRX/ZIP for pre-release security audit, vulnerability scanning, and fix suggestions.",
     "url": "https://extensionshield.com/scan"
   };
 

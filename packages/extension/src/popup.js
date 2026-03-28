@@ -154,7 +154,7 @@
     var raw = scanUrlInput && scanUrlInput.value ? scanUrlInput.value.trim() : '';
     var extId = extractExtensionIdFromInput(raw);
     if (!extId) {
-      setScanUrlMessage('Enter a Chrome Web Store URL or a 32-character extension ID.', 'error');
+      setScanUrlMessage('Enter a Chrome Web Store URL.', 'error');
       return;
     }
 
