@@ -13,12 +13,69 @@ The Rules Engine is:
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional, Literal
+from typing import Dict, Any, List, Optional, Literal, Tuple
 from pathlib import Path
 
 from .schemas import RuleResult, RuleResults
 
 logger = logging.getLogger(__name__)
+
+VALID_VERDICTS = {"ALLOW", "BLOCK", "NEEDS_REVIEW"}
+
+
+class RuleConditionError(Exception):
+    """Raised when a rule condition cannot be parsed/evaluated.
+
+    This is distinct from a condition that legitimately evaluates to False. A
+    parse/evaluation error must fail CLOSED (NEEDS_REVIEW), never silently ALLOW.
+    """
+
+
+def validate_rulepack(rulepack: Any) -> List[str]:
+    """Validate a rulepack's structure. Returns a list of human-readable errors.
+
+    An empty list means the rulepack is structurally valid. Used to fail closed:
+    a rulepack with errors must not be silently dropped into an ALLOW.
+    """
+    errors: List[str] = []
+    if not isinstance(rulepack, dict):
+        return [f"rulepack is not a mapping (got {type(rulepack).__name__})"]
+
+    rp_id = rulepack.get("rulepack_id")
+    if not rp_id or not isinstance(rp_id, str):
+        errors.append("missing or non-string 'rulepack_id'")
+
+    rules = rulepack.get("rules")
+    if not isinstance(rules, list) or not rules:
+        errors.append(f"rulepack '{rp_id}' has no 'rules' list")
+        return errors
+
+    seen_ids = set()
+    for idx, rule in enumerate(rules):
+        where = f"rulepack '{rp_id}' rule #{idx}"
+        if not isinstance(rule, dict):
+            errors.append(f"{where}: rule is not a mapping")
+            continue
+        rid = rule.get("rule_id")
+        if not rid or not isinstance(rid, str):
+            errors.append(f"{where}: missing or non-string 'rule_id'")
+        elif rid in seen_ids:
+            errors.append(f"{where}: duplicate rule_id '{rid}'")
+        else:
+            seen_ids.add(rid)
+        cond = rule.get("condition")
+        if not cond or not isinstance(cond, str) or not cond.strip():
+            errors.append(f"{where} ('{rid}'): missing or empty 'condition'")
+        verdict = rule.get("verdict")
+        if verdict not in VALID_VERDICTS:
+            errors.append(
+                f"{where} ('{rid}'): invalid verdict {verdict!r} "
+                f"(must be one of {sorted(VALID_VERDICTS)})"
+            )
+        conf = rule.get("confidence", 0.8)
+        if not isinstance(conf, (int, float)) or not (0.0 <= float(conf) <= 1.0):
+            errors.append(f"{where} ('{rid}'): confidence {conf!r} not in [0,1]")
+    return errors
 
 
 class ConditionEvaluator:
@@ -50,11 +107,14 @@ class ConditionEvaluator:
         """
         self.context = context
         try:
-            result = self._parse_or(condition.strip())
-            return result
+            return self._parse_or(condition.strip())
+        except RuleConditionError:
+            # Propagate parse errors so the rule fails CLOSED (NEEDS_REVIEW),
+            # rather than being swallowed into a silent ALLOW.
+            raise
         except Exception as e:
             logger.error(f"Error evaluating condition '{condition}': {e}")
-            return False
+            raise RuleConditionError(str(e)) from e
     
     def _parse_or(self, expr: str) -> bool:
         """Parse OR expressions (lowest precedence)."""
@@ -111,8 +171,8 @@ class ConditionEvaluator:
         if " < " in expr:
             return self._eval_numeric_comparison(expr, "<")
         
-        logger.warning(f"Unknown comparison operator in: {expr}")
-        return False
+        # Unknown / unparseable expression: fail closed (do not silently ALLOW).
+        raise RuleConditionError(f"Unknown comparison operator in: {expr}")
     
     def _split_on_operator(self, expr: str, operator: str) -> List[str]:
         """Split expression on operator, respecting parentheses."""
@@ -339,47 +399,88 @@ class RulesEngine:
     and produces rule_results.json with ALLOW/BLOCK/NEEDS_REVIEW verdicts.
     """
     
-    def __init__(self, rulepacks: List[Dict[str, Any]]):
+    def __init__(
+        self,
+        rulepacks: List[Dict[str, Any]],
+        load_errors: Optional[List[str]] = None,
+    ):
         """
         Initialize the Rules Engine.
-        
+
         Args:
-            rulepacks: List of rulepack dictionaries loaded from YAML
+            rulepacks: List of *validated* rulepack dictionaries loaded from YAML
+            load_errors: Errors encountered while loading/validating rulepacks.
+                When non-empty the engine fails CLOSED (emits a NEEDS_REVIEW
+                synthetic result) so malformed rulepacks never silently ALLOW.
         """
         self.rulepacks = rulepacks
+        self.load_errors = list(load_errors or [])
         self.evaluator = ConditionEvaluator()
-        logger.info(f"Initialized Rules Engine with {len(rulepacks)} rulepacks")
-    
+        logger.info(
+            "Initialized Rules Engine with %d rulepacks (%d load errors)",
+            len(rulepacks),
+            len(self.load_errors),
+        )
+
     @staticmethod
-    def load_rulepacks(rulepacks_dir: str) -> List[Dict[str, Any]]:
+    def load_rulepacks_with_report(
+        rulepacks_dir: str,
+    ) -> Tuple[List[Dict[str, Any]], List[str]]:
         """
-        Load all rulepacks from a directory.
-        
-        Args:
-            rulepacks_dir: Path to directory containing rulepack YAML files
-            
+        Load and validate all rulepacks from a directory.
+
         Returns:
-            List of rulepack dictionaries
+            (valid_rulepacks, errors). A YAML parse error or a schema-validation
+            error excludes that rulepack from ``valid_rulepacks`` and records a
+            message in ``errors`` so the caller can fail closed.
         """
         import yaml
-        
-        rulepacks = []
+
+        rulepacks: List[Dict[str, Any]] = []
+        errors: List[str] = []
         dir_path = Path(rulepacks_dir)
-        
+
         if not dir_path.exists():
-            logger.warning(f"Rulepacks directory not found: {rulepacks_dir}")
-            return []
-        
-        for yaml_file in dir_path.glob("*.yaml"):
+            msg = f"Rulepacks directory not found: {rulepacks_dir}"
+            logger.warning(msg)
+            return [], [msg]
+
+        for yaml_file in sorted(dir_path.glob("*.yaml")):
             try:
                 with open(yaml_file, "r") as f:
                     rulepack = yaml.safe_load(f)
-                    if rulepack:
-                        rulepacks.append(rulepack)
-                        logger.info(f"Loaded rulepack: {rulepack.get('rulepack_id')}")
             except Exception as e:
-                logger.error(f"Error loading rulepack {yaml_file}: {e}")
-        
+                msg = f"Failed to parse rulepack {yaml_file.name}: {e}"
+                logger.error(msg)
+                errors.append(msg)
+                continue
+
+            if not rulepack:
+                msg = f"Rulepack {yaml_file.name} is empty"
+                logger.error(msg)
+                errors.append(msg)
+                continue
+
+            rp_errors = validate_rulepack(rulepack)
+            if rp_errors:
+                for err in rp_errors:
+                    msg = f"Invalid rulepack {yaml_file.name}: {err}"
+                    logger.error(msg)
+                    errors.append(msg)
+                continue
+
+            rulepacks.append(rulepack)
+            logger.info(f"Loaded rulepack: {rulepack.get('rulepack_id')}")
+
+        return rulepacks, errors
+
+    @staticmethod
+    def load_rulepacks(rulepacks_dir: str) -> List[Dict[str, Any]]:
+        """Backwards-compatible loader returning only the valid rulepacks.
+
+        Prefer :meth:`load_rulepacks_with_report` so load errors can fail closed.
+        """
+        rulepacks, _errors = RulesEngine.load_rulepacks_with_report(rulepacks_dir)
         return rulepacks
     
     def evaluate(
@@ -408,26 +509,58 @@ class RulesEngine:
         # Build evaluation context
         eval_context = self._build_eval_context(facts, signals, store_listing)
         
+        rule_results: List[RuleResult] = []
+
+        # Fail CLOSED on rulepack load/validation errors: a malformed rulepack
+        # must surface as NEEDS_REVIEW, never be silently dropped into an ALLOW.
+        for load_err in self.load_errors:
+            rule_results.append(self._fail_closed_result("__rulepack_load_error__", load_err))
+
         # Get rulepacks from context
         rulepack_ids = context.get("rulepacks", [])
         active_rulepacks = [
-            rp for rp in self.rulepacks 
+            rp for rp in self.rulepacks
             if rp.get("rulepack_id") in rulepack_ids
         ]
-        
-        if not active_rulepacks:
-            logger.warning(f"No active rulepacks found for context: {rulepack_ids}")
-        
+
+        # Requested rulepacks that could not be found also fail closed.
+        missing = [rid for rid in rulepack_ids if rid not in {rp.get("rulepack_id") for rp in self.rulepacks}]
+        for rid in missing:
+            logger.warning("Requested rulepack not available: %s", rid)
+            rule_results.append(
+                self._fail_closed_result(
+                    "__rulepack_missing__",
+                    f"Requested rulepack '{rid}' is not available; cannot evaluate its policy",
+                )
+            )
+
+        if not active_rulepacks and not missing and not self.load_errors:
+            logger.warning(f"No active rulepacks selected for context: {rulepack_ids}")
+
         # Evaluate rules
-        rule_results = []
         for rulepack in active_rulepacks:
             for rule in rulepack.get("rules", []):
                 result = self._evaluate_rule(rule, eval_context, rulepack.get("rulepack_id"))
                 rule_results.append(result)
-        
-        logger.info(f"Evaluated {len(rule_results)} rules")
-        
+
+        logger.info(f"Evaluated {len(rule_results)} rule results")
+
         return RuleResults(scan_id=scan_id, rule_results=rule_results)
+
+    @staticmethod
+    def _fail_closed_result(rule_id: str, message: str) -> RuleResult:
+        """Build a synthetic NEEDS_REVIEW result used when the engine fails closed."""
+        return RuleResult(
+            rule_id=rule_id,
+            rulepack="__engine__",
+            verdict="NEEDS_REVIEW",
+            confidence=1.0,
+            evidence_refs=[],
+            citations=[],
+            explanation=f"Fail-closed: {message}",
+            recommended_action="Manual review required (rulepack could not be evaluated)",
+            triggered_at=datetime.now(timezone.utc),
+        )
     
     def _build_eval_context(
         self,

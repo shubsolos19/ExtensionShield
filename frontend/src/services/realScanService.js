@@ -350,10 +350,13 @@ class RealScanService {
         overall_confidence: cliResults.overall_confidence,
         decision_v2: cliResults.decision_v2,
         decision_reasons_v2: cliResults.decision_reasons_v2,
+        insufficient_data: cliResults.insufficient_data,
+        decision_authority: cliResults.decision_authority,
         scoring_v2: cliResults.scoring_v2,
-        
+
         // Governance bundle - needed for factors and evidence
         governance_bundle: cliResults.governance_bundle,
+        // Authoritative final verdict (single Decision Authority)
         governance_verdict: cliResults.governance_verdict,
         
         // Preserve raw manifest and metadata for permissions
@@ -620,7 +623,13 @@ class RealScanService {
           summary: bundle.report?.decision || {},
           facts: bundle.facts || null,
           // New governance-specific fields (mapped verdict)
-          verdict: this.mapVerdict(bundle.decision?.verdict || reportData.governance_verdict),
+          // Prefer the single Decision Authority; the legacy rules-engine
+          // bundle.decision.verdict is a fallback only (must not override it).
+          verdict: this.mapVerdict(
+            bundle.decision?.final_verdict ||
+            reportData.governance_verdict ||
+            bundle.decision?.verdict
+          ),
           rationale: bundle.decision?.rationale,
           action_required: bundle.decision?.action_required,
           store_listing: bundle.store_listing,

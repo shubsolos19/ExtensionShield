@@ -8,9 +8,9 @@ import { Shield, Eye, Scale, CheckCircle2, Loader2, Package } from "lucide-react
 import "./SecurityPipeline.scss";
 
 const PIPELINE_STAGES = [
-  { id: "security", label: "Security", Icon: Shield, weight: "40%", color: "#3b82f6", description: "Malware & threat detection" },
-  { id: "privacy", label: "Privacy", Icon: Eye, weight: "35%", color: "#8b5cf6", description: "Data collection analysis" },
-  { id: "governance", label: "Governance", Icon: Scale, weight: "25%", color: "#f59e0b", description: "Compliance verification" },
+  { id: "security", label: "Security", Icon: Shield, weight: "34%", color: "#3b82f6", description: "Malware & threat detection" },
+  { id: "privacy", label: "Privacy", Icon: Eye, weight: "33%", color: "#8b5cf6", description: "Data collection analysis" },
+  { id: "governance", label: "Governance", Icon: Scale, weight: "33%", color: "#f59e0b", description: "Compliance verification" },
 ];
 
 export default function SecurityPipeline({ reducedMotion = false }) {

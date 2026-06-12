@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_RULEPACKS = [
     "ENTERPRISE_GOV_BASELINE",
     "CWS_LIMITED_USE",
+    "PROTECTED_SERVICE_AUTOMATION",
 ]
 
 # Supported regions

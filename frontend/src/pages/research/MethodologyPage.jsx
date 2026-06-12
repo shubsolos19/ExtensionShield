@@ -16,7 +16,7 @@ const methodologyFaqSchema = {
       "name": "How is the extension risk score calculated?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "ExtensionShield combines three pipelines: Security (40%), Privacy (35%), and Governance (25%). Security uses open-source SAST (Semgrep-based rules), Privacy analyzes data collection and tracking, and Governance covers policy alignment and developer reputation."
+        "text": "ExtensionShield combines three pipelines weighted near-equally in the smooth score: Security (34%), Privacy (33%), and Governance (33%). Security uses open-source SAST (Semgrep-based rules), Privacy analyzes data collection and tracking, and Governance covers policy alignment and developer reputation. Hard gates override the smooth score to BLOCK severe findings such as malware or credential capture."
       }
     },
     {
@@ -83,17 +83,17 @@ const MethodologyPage = () => {
             <div className="aggregate-formula">
               <div className="formula-item">
                 <span className="formula-label">Security</span>
-                <span className="formula-weight">× 40%</span>
+                <span className="formula-weight">× 34%</span>
               </div>
               <span className="formula-plus">+</span>
               <div className="formula-item">
                 <span className="formula-label">Privacy</span>
-                <span className="formula-weight">× 35%</span>
+                <span className="formula-weight">× 33%</span>
               </div>
               <span className="formula-plus">+</span>
               <div className="formula-item">
                 <span className="formula-label">Governance</span>
-                <span className="formula-weight">× 25%</span>
+                <span className="formula-weight">× 33%</span>
               </div>
             </div>
           </div>

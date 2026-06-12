@@ -37,7 +37,7 @@ const CrxcavatorAlternativePage = () => {
               CRXcavator provides permission-based scoring, RetireJS, and CSP checks for Chrome, Firefox, and Edge extensions. Teams often look for alternatives due to availability, limited transparency in how scores are calculated, or the need for a dedicated <strong>governance and compliance</strong> layer.
             </p>
             <p>
-              <strong>ExtensionShield</strong> gives you a single <strong>chrome extension risk score</strong> (0–100) with three dimensions: Security (40%), Privacy (35%), and Governance (25%). We add SAST (Semgrep), VirusTotal integration, obfuscation detection, and explicit governance signals so you can audit extensions and support compliance. Our methodology is documented; reports are evidence-based and suitable for audits.
+              <strong>ExtensionShield</strong> gives you a single <strong>chrome extension risk score</strong> (0–100) with three near-equally weighted dimensions: Security (34%), Privacy (33%), and Governance (33%), with hard gates that override the score to BLOCK severe findings. We add SAST (Semgrep), VirusTotal integration, obfuscation detection, and explicit governance signals so you can audit extensions and support compliance. Our methodology is documented; reports are evidence-based and suitable for audits.
             </p>
             <ul>
               <li>Transparent weights and methodology (Security / Privacy / Governance)</li>

@@ -1,0 +1,83 @@
+# Declarative data for protected-service (visa / travel-document) automation
+# detection. This is the SINGLE SOURCE OF TRUTH for the domain/pattern/keyword
+# lists that were previously hardcoded in scoring/gates.py and scoring/engine.py.
+#
+# Edit this file (not Python) to tune detection. It is versioned and consumed by:
+#   - governance/protected_services.py (detector + signal extraction)
+#   - scoring/gates.py                 (legacy TOS gate, re-exported for compat)
+#   - governance/rulepacks/PROTECTED_SERVICE_AUTOMATION.yaml (declarative rules)
+version: "1.0.0"
+
+# Services whose Terms of Use prohibit automated/bot access and scraping.
+# Automating a user's session on these is a compliance/ToS violation.
+protected_service_domains:
+  - usvisascheduling.com
+  - ustraveldocs.com
+  - cgi-federal.com
+  - b2clogin.com            # Azure B2C auth used by the visa portals
+
+# Known third-party visa-slot / automation ecosystem endpoints. When an
+# extension that touches a protected service also talks to one of these, it is a
+# strong signal of unauthorized third-party processing / data exfiltration.
+ecosystem_domains:
+  - checkvisaslots.com
+  - visaslots.ca
+  - easyslotbooking.com
+  - usavisaslot.com
+  - earlyvisa.co
+  - firstslotsalert.com
+  - fastervisa.co
+  - luckybee.app
+  - visaslotwatch.com
+  - slotbot.in
+  - vecnaselfie.com
+  - visaslots.info
+  - visaslots.us
+  - visajar.com
+
+# Regex patterns (case-insensitive) grouped by behavior category.
+screenshot_capture_patterns:
+  - 'html2canvas'
+  - 'toDataURL\(\s*["'']image/(png|jpeg)["'']\s*\)'
+  - 'captureVisibleTab'
+  - 'desktopCapture'
+
+xhr_interception_patterns:
+  - 'xmlhttprequest\.prototype\.(open|send)\s*='
+  - '\.open\s*=\s*function'
+  - '\.send\s*=\s*function'
+  - 'intercept.*xmlhttprequest'
+
+credential_capture_patterns:
+  - 'logindetails'
+  - 'securityquestions'
+  - 'security\s*question'
+  - '#?password'
+  - '#?signinname'
+  - 'credential'
+  - '\blogin\b'
+
+# External-exfiltration intent in code (paired with an ecosystem/external host).
+exfil_patterns:
+  - 'fetch\s*\('
+  - 'sendbeacon'
+  - 'xmlhttprequest'
+  - 'new\s+formdata'
+  - '/push/'
+
+# Sensitive identity keywords whose presence near a protected service indicates
+# collection of high-sensitivity identity data.
+identity_keywords:
+  - passport
+  - visa
+  - appointment
+  - applicant
+  - consular
+  - travel document
+
+# Indicators of anti-competitive sabotage of other extensions (deceptive behavior).
+sabotage_indicators:
+  - visajar.com
+  - visaslots.info
+  - 'remove.*extension'
+  - 'crappyextensions'

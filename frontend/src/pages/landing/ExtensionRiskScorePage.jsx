@@ -47,9 +47,10 @@ const ExtensionRiskScorePage = () => {
 
             <h2>The three scoring layers</h2>
             <ul>
-              <li><strong>Security - 40%:</strong> suspicious code patterns, SAST rules, vulnerable libraries, obfuscation, threat-intel findings, and exploit-relevant APIs.</li>
-              <li><strong>Privacy - 35%:</strong> sensitive permissions, all-site access, cookies, history, clipboard, storage, network destinations, and data exfiltration paths.</li>
-              <li><strong>Governance - 25%:</strong> policy alignment, permission justification, disclosure accuracy, developer reputation, update risk, and audit readiness.</li>
+              <li><strong>Security - 34%:</strong> suspicious code patterns, SAST rules, vulnerable libraries, obfuscation, threat-intel findings, and exploit-relevant APIs.</li>
+              <li><strong>Privacy - 33%:</strong> sensitive permissions, all-site access, cookies, history, clipboard, storage, network destinations, and data exfiltration paths.</li>
+              <li><strong>Governance - 33%:</strong> policy alignment, permission justification, disclosure accuracy, developer reputation, update risk, and audit readiness.</li>
+              <li><em>Hard gates override the weighted score to BLOCK severe findings (e.g. malware or credential capture).</em></li>
             </ul>
 
             <h2>Why this is different from a scanner score</h2>

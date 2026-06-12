@@ -57,6 +57,17 @@ class SignalType:
     HIGH_ENTROPY = "HIGH_ENTROPY"
     UNREASONABLE_PERMISSIONS = "UNREASONABLE_PERMISSIONS"
 
+    # Protected-service (visa / travel-document) automation signal types.
+    # Consumed by the PROTECTED_SERVICE_AUTOMATION rulepack.
+    PROTECTED_SERVICE_DOMAIN = "PROTECTED_SERVICE_DOMAIN"
+    PROTECTED_SERVICE_AUTOMATION = "PROTECTED_SERVICE_AUTOMATION"
+    SCREENSHOT_CAPTURE = "SCREENSHOT_CAPTURE"
+    XHR_INTERCEPTION = "XHR_INTERCEPTION"
+    CREDENTIAL_CAPTURE = "CREDENTIAL_CAPTURE"
+    IDENTITY_DATA_EXFIL = "IDENTITY_DATA_EXFIL"
+    SENSITIVE_IDENTITY_KEYWORDS = "SENSITIVE_IDENTITY_KEYWORDS"
+    COMPETITOR_SABOTAGE = "COMPETITOR_SABOTAGE"
+
 
 # Sensitive Chrome APIs that warrant review
 SENSITIVE_APIS = [
@@ -405,6 +416,7 @@ class SignalExtractor:
         signals_list.extend(self._extract_permissions_signals(signal_pack))
         signals_list.extend(self._extract_webstore_signals(signal_pack))
         signals_list.extend(self._extract_chromestats_signals(signal_pack))
+        signals_list.extend(self._extract_protected_service_signals(signal_pack))
         
         # Link evidence to signals
         signals_list = self._link_evidence_to_signals(signal_pack, signals_list)
@@ -417,6 +429,64 @@ class SignalExtractor:
         
         return Signals(scan_id=signal_pack.scan_id, signals=signals_list)
     
+    def _extract_protected_service_signals(self, signal_pack: "SignalPack") -> List[Signal]:
+        """Emit protected-service (visa/travel-doc) automation signals.
+
+        Detection is delegated to ``governance.protected_services.detect`` which
+        reads the declarative config/protected_services.yaml. These signals are
+        consumed by the PROTECTED_SERVICE_AUTOMATION rulepack.
+        """
+        from extension_shield.governance.protected_services import detect
+
+        manifest = getattr(signal_pack, "manifest", None) or {}
+        det = detect(signal_pack, manifest)
+        signals: List[Signal] = []
+
+        def _add(stype: str, desc: str, severity: str, confidence: float = 0.85):
+            signals.append(Signal(
+                signal_id=self._next_signal_id(),
+                type=stype,
+                confidence=confidence,
+                evidence_refs=[],
+                description=desc,
+                severity=severity,
+            ))
+
+        if det.protected_domain:
+            _add(
+                SignalType.PROTECTED_SERVICE_DOMAIN,
+                f"Targets protected service domain(s): {', '.join(det.protected_domain_hits)}",
+                "high",
+                0.95,
+            )
+        if det.is_protected_service_automation:
+            _add(
+                SignalType.PROTECTED_SERVICE_AUTOMATION,
+                "Automates a protected service whose terms prohibit automated access",
+                "critical",
+                0.9,
+            )
+        if det.screenshot_capture:
+            _add(SignalType.SCREENSHOT_CAPTURE, "Screenshot/page capture of rendered content", "high")
+        if det.xhr_interception:
+            _add(SignalType.XHR_INTERCEPTION, "Intercepts the page's XHR/fetch API traffic", "high")
+        if det.credential_capture:
+            _add(SignalType.CREDENTIAL_CAPTURE, "Captures or auto-fills credentials/security answers", "critical", 0.9)
+        if det.external_exfil:
+            _add(
+                SignalType.IDENTITY_DATA_EXFIL,
+                "Sends data to an external/third-party endpoint: "
+                + (", ".join(det.ecosystem_hits) or "external host"),
+                "critical",
+                0.9,
+            )
+        if det.identity_keywords:
+            _add(SignalType.SENSITIVE_IDENTITY_KEYWORDS, "Handles sensitive identity data (passport/visa/appointment)", "high")
+        if det.competitor_sabotage:
+            _add(SignalType.COMPETITOR_SABOTAGE, "Indicators of sabotaging competitor extensions", "medium", 0.7)
+
+        return signals
+
     def _extract_sast_signals(self, signal_pack: "SignalPack") -> List[Signal]:
         """Extract signals from SAST findings in SignalPack."""
         signals = []

@@ -43,33 +43,14 @@ from extension_shield.scoring.models import Decision, LayerScore
 # DOMAIN LISTS (COMPLIANCE / SITE TERMS)
 # =============================================================================
 
-# US visa scheduling ecosystem domains referenced in compliance findings.
-# These sites are known to prohibit automated access/scraping and/or
-# unauthorized third-party processing in their Terms of Use.
-TRAVEL_DOCS_PROTECTED_DOMAINS: Tuple[str, ...] = (
-    "usvisascheduling.com",
-    "ustraveldocs.com",
-    "cgi-federal.com",
-    "b2clogin.com",  # Azure B2C auth used by visa portals
-)
-
-# Known third-party visa-slot / automation ecosystem domains (non-exhaustive).
-# Used to flag potential unauthorized processors when paired with protected portals.
-VISA_SLOT_ECOSYSTEM_DOMAINS: Tuple[str, ...] = (
-    "checkvisaslots.com",
-    "visaslots.ca",
-    "easyslotbooking.com",
-    "usavisaslot.com",
-    "earlyvisa.co",
-    "firstslotsalert.com",
-    "fastervisa.co",
-    "luckybee.app",
-    "visaslotwatch.com",
-    "slotbot.in",
-    "vecnaselfie.com",
-    "visaslots.info",
-    "visaslots.us",
-    "visajar.com",
+# Protected visa/travel-doc domains now live in the declarative single source of
+# truth: config/protected_services.yaml (loaded by governance/protected_services.py).
+# They are re-exported here under the legacy names for backward compatibility so the
+# existing TOS gate keeps working unchanged while detection logic migrates to the
+# PROTECTED_SERVICE_AUTOMATION rulepack. Edit the YAML, not this file, to tune lists.
+from extension_shield.governance.protected_services import (  # noqa: E402
+    PROTECTED_SERVICE_DOMAINS as TRAVEL_DOCS_PROTECTED_DOMAINS,
+    ECOSYSTEM_DOMAINS as VISA_SLOT_ECOSYSTEM_DOMAINS,
 )
 
 
@@ -533,6 +514,12 @@ class HardGates:
 
         # ---------------------------------------------------------------------
         # Travel-docs / visa portal ToS risk (deterministic, evidence-based)
+        #
+        # DEPRECATION (backstop): this branch is superseded by the declarative
+        # PROTECTED_SERVICE_AUTOMATION rulepack. It is intentionally KEPT as a
+        # defensive backstop and will be retired only after that rulepack has
+        # proven itself across more fixtures. See docs/adr/0001-scoring-governance-
+        # decision-authority.md ("Why the hardcoded TOS gate remains").
         # ---------------------------------------------------------------------
 
         def _matches_any_domain(patterns: List[str], domains: Tuple[str, ...]) -> List[str]:
@@ -991,59 +978,38 @@ class HardGates:
     ) -> Tuple[Decision, List[str], List[str]]:
         """
         Compute final governance decision from gates and layer scores.
-        
-        Decision priority:
-        1. Any BLOCK gate → BLOCK
-        2. Layer scores below threshold → BLOCK or NEEDS_REVIEW
-        3. Any WARN gate → NEEDS_REVIEW
-        4. All pass → ALLOW
-        
+
+        This delegates to the single Decision Authority (``scoring.decision.resolve``)
+        so gate-only decisions use the exact same precedence chain and thresholds
+        (``DecisionPolicy``) as the scoring engine. Do not reintroduce separate
+        thresholds here.
+
         Args:
             gate_results: Results from evaluate_all()
             layer_scores: Optional dict of layer scores (security, privacy, governance)
-            
+
         Returns:
             Tuple of (Decision, reasons list, triggered gate IDs)
         """
+        from extension_shield.scoring.decision import resolve as resolve_decision
+
         blocking_gates = self.get_blocking_gates(gate_results)
         warning_gates = self.get_warning_gates(gate_results)
-        
-        reasons: List[str] = []
-        triggered_ids: List[str] = []
-        
-        # Priority 1: BLOCK gates
-        if blocking_gates:
-            for gate in blocking_gates:
-                triggered_ids.append(gate.gate_id)
-                reasons.extend(gate.reasons)
-            return Decision.BLOCK, reasons, triggered_ids
-        
-        # Priority 2: Check layer scores if provided
-        if layer_scores:
-            security_score = layer_scores.get("security")
-            if security_score and security_score.score < 30:
-                reasons.append(f"Security score {security_score.score}/100 below threshold")
-                return Decision.BLOCK, reasons, triggered_ids
-            
-            overall_low = False
-            for layer_name, layer in layer_scores.items():
-                if layer.score < 50:
-                    overall_low = True
-                    reasons.append(f"{layer_name.title()} score {layer.score}/100 below threshold")
-            
-            if overall_low:
-                return Decision.NEEDS_REVIEW, reasons, triggered_ids
-        
-        # Priority 3: WARN gates
-        if warning_gates:
-            for gate in warning_gates:
-                triggered_ids.append(gate.gate_id)
-                reasons.extend(gate.reasons)
-            return Decision.NEEDS_REVIEW, reasons, triggered_ids
-        
-        # Priority 4: All pass
-        reasons.append("All gates passed, no significant issues detected")
-        return Decision.ALLOW, reasons, triggered_ids
+        triggered_ids = [g.gate_id for g in blocking_gates + warning_gates]
+
+        def _score(name: str, default: int) -> int:
+            layer = (layer_scores or {}).get(name)
+            return layer.score if layer is not None else default
+
+        final = resolve_decision(
+            overall_score=_score("overall", _score("security", 100)),
+            security_score=_score("security", 100),
+            privacy_score=_score("privacy", 100),
+            governance_score=_score("governance", 100),
+            blocking_gates=blocking_gates,
+            warning_gates=warning_gates,
+        )
+        return final.verdict, final.reasons, triggered_ids
 
 
 # =============================================================================

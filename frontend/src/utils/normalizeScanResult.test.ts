@@ -596,6 +596,72 @@ describe('normalizeScanResult', () => {
 });
 
 // =============================================================================
+// DECISION AUTHORITY CONSUMER CONSISTENCY (ADR 0001)
+// =============================================================================
+
+describe('normalizeScanResult - decision authority consistency', () => {
+  it('prefers governance_verdict over scoring_v2.decision', () => {
+    // Scoring layer says ALLOW, but the governance authority says BLOCK.
+    const raw: RawScanResult = {
+      extension_id: 'authority1',
+      governance_verdict: 'BLOCK',
+      scoring_v2: {
+        security_score: 80,
+        privacy_score: 80,
+        governance_score: 80,
+        overall_score: 80,
+        overall_confidence: 0.9,
+        decision: 'ALLOW', // scoring-layer detail only
+      },
+    };
+    const result = normalizeScanResult(raw);
+    expect(result.scores.decision).toBe('BLOCK');
+  });
+
+  it('prefers governance_bundle.decision.final_verdict over legacy bundle verdict', () => {
+    const raw: RawScanResult = {
+      extension_id: 'authority2',
+      governance_bundle: {
+        decision: { final_verdict: 'NEEDS_REVIEW', verdict: 'ALLOW' },
+      } as unknown as RawScanResult['governance_bundle'],
+      scoring_v2: { overall_score: 90, decision: 'ALLOW' },
+    };
+    const result = normalizeScanResult(raw);
+    // NEEDS_REVIEW normalizes to the 'WARN' band in the VM.
+    expect(result.scores.decision).toBe('WARN');
+  });
+
+  it('falls back to scoring_v2.decision when no governance verdict exists', () => {
+    const raw: RawScanResult = {
+      extension_id: 'authority3',
+      scoring_v2: { overall_score: 21, decision: 'BLOCK' },
+    };
+    const result = normalizeScanResult(raw);
+    expect(result.scores.decision).toBe('BLOCK');
+  });
+
+  it('surfaces insufficient_data so a low-coverage scan is not shown as confidently safe', () => {
+    const raw: RawScanResult = {
+      extension_id: 'lowcov',
+      insufficient_data: true,
+      governance_verdict: 'NEEDS_REVIEW',
+      scoring_v2: {
+        overall_score: 65,
+        overall_confidence: 0.46,
+        decision: 'NEEDS_REVIEW',
+        insufficient_data: true,
+        decision_authority: 'insufficient_data',
+      },
+    };
+    const result = normalizeScanResult(raw);
+    expect(result.scores.insufficientData).toBe(true);
+    // NEEDS_REVIEW normalizes to the 'WARN' band in the VM.
+    expect(result.scores.decision).toBe('WARN');
+    expect(result.scores.decisionAuthority).toBe('insufficient_data');
+  });
+});
+
+// =============================================================================
 // RUNTIME ASSERTIONS (can be run independently)
 // =============================================================================
 

@@ -436,7 +436,7 @@ export const blogPosts = [
       },
       {
         heading: "ExtensionShield's model",
-        body: "ExtensionShield scores Security at 40%, Privacy at 35%, and Governance at 25%. The report keeps each layer visible so the final number can be explained."
+        body: "ExtensionShield's smooth score weights Security, Privacy, and Governance near-equally (about 34% / 33% / 33%), while hard gates override the score to BLOCK severe findings such as malware or credential capture. The report keeps each layer visible so the final number can be explained."
       },
       {
         heading: "Use the score as a decision aid",

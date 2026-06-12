@@ -99,7 +99,7 @@ export function normalizeHighlights(raw: RawScanResult | null | undefined): Norm
 
   // If oneLiner is empty, use a placeholder based on decision
   if (!result.oneLiner) {
-    const decision = raw.scoring_v2?.decision || raw.decision_v2 || raw.governance_verdict;
+    const decision = resolveFinalVerdict(raw);
     if (decision === 'BLOCK') result.oneLiner = 'This extension was blocked by automated security checks.';
     else if (decision === 'WARN' || decision === 'NEEDS_REVIEW') result.oneLiner = 'This extension requires manual review before use.';
     else result.oneLiner = 'This extension has been analyzed for security, privacy, and compliance risks.';
@@ -117,6 +117,45 @@ export function normalizeHighlights(raw: RawScanResult | null | undefined): Norm
  */
 function safeGet<T>(value: T | undefined | null, defaultValue: T): T {
   return value !== undefined && value !== null ? value : defaultValue;
+}
+
+/**
+ * Resolve the final cross-system verdict.
+ *
+ * Precedence follows the single Decision Authority (ADR 0001): prefer
+ * governance_verdict / final_verdict, and treat scoring_v2.decision /
+ * decision_v2 as scoring-layer detail only. Never let the scoring-layer
+ * decision override the governance authority.
+ */
+function resolveFinalVerdict(
+  raw: RawScanResult,
+  scoringV2?: RawScoringV2 | null
+): string | undefined {
+  const sv2 = scoringV2 ?? raw.scoring_v2;
+  return (
+    raw.final_verdict ||
+    raw.governance_verdict ||
+    raw.governance_bundle?.decision?.final_verdict ||
+    sv2?.decision ||
+    raw.decision_v2 ||
+    undefined
+  );
+}
+
+/**
+ * Resolve whether this scan had insufficient analysis coverage. A low-coverage
+ * scan must not be shown as confidently safe.
+ */
+function resolveInsufficientData(
+  raw: RawScanResult,
+  scoringV2?: RawScoringV2 | null
+): boolean {
+  const sv2 = scoringV2 ?? raw.scoring_v2;
+  return Boolean(
+    raw.insufficient_data ||
+    sv2?.insufficient_data ||
+    raw.governance_bundle?.decision?.insufficient_data
+  );
 }
 
 /**
@@ -903,9 +942,14 @@ export function normalizeScanResult(raw: RawScanResult): ReportViewModel {
   };
   
   // Build scores
-  const decision = normalizeDecision(
-    scoringV2?.decision || raw.decision_v2 || raw.governance_verdict
-  );
+  // Final verdict prefers the governance Decision Authority over scoring-layer detail.
+  const decision = normalizeDecision(resolveFinalVerdict(raw, scoringV2));
+  const insufficientData = resolveInsufficientData(raw, scoringV2);
+  const decisionAuthority =
+    raw.decision_authority ||
+    scoringV2?.decision_authority ||
+    raw.governance_bundle?.decision?.final_authority ||
+    null;
   
   // Get scores from scoring_v2 or fallback to legacy (also support formatted camelCase)
   const securityScore = scoringV2?.security_score ?? raw.security_score ?? raw.overall_security_score ?? formatted.securityScore ?? null;
@@ -998,6 +1042,8 @@ export function normalizeScanResult(raw: RawScanResult): ReportViewModel {
     },
     decision,
     reasons: scoringV2?.decision_reasons || scoringV2?.reasons || raw.decision_reasons_v2 || [],
+    insufficientData,
+    decisionAuthority,
   };
   
   // Build factors by layer

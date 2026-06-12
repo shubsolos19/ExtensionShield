@@ -118,8 +118,14 @@ class TestMissingVTDoesNotDrasticallyReduceScore:
         Since VT weight is 0.15 and missing VT has severity=0 (not high),
         the score impact should be minimal.
         """
+        # Both packs have SAST coverage so we isolate VT's *marginal* effect.
+        # (Zero-coverage behavior is covered by the insufficient-data tests; a pack
+        # whose only signal is VT is not a realistic baseline for this comparison.)
+        from extension_shield.governance.signal_pack import SastSignalPack
+
         # Pack with VT enabled and clean
         pack_with_vt = make_min_signal_pack(scan_id="with-vt")
+        pack_with_vt.sast = SastSignalPack(deduped_findings=[], files_scanned=12, confidence=0.9)
         pack_with_vt.virustotal = VirusTotalSignalPack(
             enabled=True,
             malicious_count=0,
@@ -127,11 +133,12 @@ class TestMissingVTDoesNotDrasticallyReduceScore:
             total_engines=70,
         )
         add_webstore_stats(pack_with_vt, installs=10000, rating_avg=4.5)
-        
+
         result_with_vt = engine.calculate_scores(pack_with_vt, manifest, user_count=10000)
-        
-        # Pack with VT disabled (missing)
+
+        # Pack with VT disabled (missing) but SAST coverage present
         pack_missing_vt = make_min_signal_pack(scan_id="missing-vt")
+        pack_missing_vt.sast = SastSignalPack(deduped_findings=[], files_scanned=12, confidence=0.9)
         pack_missing_vt.virustotal = VirusTotalSignalPack(enabled=False)
         add_webstore_stats(pack_missing_vt, installs=10000, rating_avg=4.5)
         

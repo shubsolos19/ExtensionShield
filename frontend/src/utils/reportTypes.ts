@@ -244,9 +244,13 @@ export interface RawScoringV2 {
   governance_score?: number;
   overall_score?: number;
   overall_confidence?: number;
+  /** Scoring-layer decision (engine scoring rungs only) — secondary/detail.
+   *  The authoritative cross-system verdict is raw.governance_verdict. */
   decision?: string; // "ALLOW" | "BLOCK" | "NEEDS_REVIEW"
   decision_reasons?: string[];
   reasons?: string[];
+  insufficient_data?: boolean;
+  decision_authority?: string;
   hard_gates_triggered?: string[];
   risk_level?: string;
   explanation?: string | {
@@ -269,6 +273,12 @@ export interface RawScoringV2 {
 
 /** Raw governance bundle decision */
 export interface RawGovernanceDecision {
+  /** Authoritative final verdict from the single Decision Authority (preferred). */
+  final_verdict?: string;
+  final_authority?: string;
+  final_reasons?: string[];
+  insufficient_data?: boolean;
+  /** Legacy rules-engine verdict — secondary/detail only; must NOT override final_verdict. */
   verdict?: string;
   rationale?: string;
   action_required?: string;
@@ -440,12 +450,17 @@ export interface RawScanResult {
   privacy_score?: number;
   governance_score?: number;
   overall_confidence?: number;
+  /** Scoring-layer decision — secondary/detail. Authoritative verdict is governance_verdict. */
   decision_v2?: string;
   decision_reasons_v2?: string[];
+  insufficient_data?: boolean;
+  decision_authority?: string;
   scoring_v2?: RawScoringV2;
 
   // Governance (Pipeline B)
+  /** Authoritative final verdict (single Decision Authority). Prefer this. */
   governance_verdict?: string;
+  final_verdict?: string;
   governance_bundle?: RawGovernanceBundle;
   governance_report?: {
     scan_id?: string;
@@ -489,8 +504,13 @@ export interface ScoresVM {
   privacy: ScoreVM;
   governance: ScoreVM;
   overall: ScoreVM;
+  /** Final cross-system verdict (prefers governance_verdict/final_verdict). */
   decision: Decision;
   reasons: string[];
+  /** True when analysis coverage was too low to clear the extension as safe. */
+  insufficientData?: boolean;
+  /** Which rung of the Decision Authority produced the verdict (detail). */
+  decisionAuthority?: string | null;
 }
 
 /** Factor view model */

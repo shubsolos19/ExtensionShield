@@ -38,6 +38,7 @@ from extension_shield.governance import (
     GovernanceScorecard,
 )
 from extension_shield.scoring.engine import ScoringEngine
+from extension_shield.scoring.decision import OrgPolicy, resolve as resolve_decision
 from extension_shield.workflow.node_types import CLEANUP_NODE
 
 
@@ -288,8 +289,10 @@ def governance_node(state: dict) -> Command:
         # Stage 7: Run Rules Engine
         logger.info("Stage 7: Evaluating rules...")
         rulepacks_dir = Path(__file__).parent.parent / "governance" / "rulepacks"
-        rulepacks = RulesEngine.load_rulepacks(str(rulepacks_dir))
-        rules_engine = RulesEngine(rulepacks)
+        rulepacks, rulepack_load_errors = RulesEngine.load_rulepacks_with_report(str(rulepacks_dir))
+        if rulepack_load_errors:
+            logger.warning("Rulepack load errors (failing closed): %s", rulepack_load_errors)
+        rules_engine = RulesEngine(rulepacks, load_errors=rulepack_load_errors)
         
         rule_results = rules_engine.evaluate(
             scan_id=scan_id,
@@ -320,7 +323,59 @@ def governance_node(state: dict) -> Command:
             report.rules_triggered,
             report.total_rules_evaluated,
         )
-        
+
+        # =====================================================================
+        # SINGLE DECISION AUTHORITY (final verdict)
+        # =====================================================================
+        # One precedence chain reconciles org policy + baseline governance rules
+        # + hard gates + scores + confidence. This is THE final verdict; the
+        # rules-engine report and scoring decision are retained as detail/audit.
+        gate_results = scoring_v2_gate_results or []
+        blocking_gates = [g for g in gate_results if g.triggered and g.decision == "BLOCK"]
+        warning_gates = [g for g in gate_results if g.triggered and g.decision == "WARN"]
+
+        baseline_block_reasons = [
+            (r.recommended_action or r.explanation)
+            for r in rule_results.rule_results
+            if r.verdict == "BLOCK"
+        ]
+        baseline_review_reasons = [
+            (r.recommended_action or r.explanation)
+            for r in rule_results.rule_results
+            if r.verdict == "NEEDS_REVIEW"
+        ]
+
+        org_cfg = state.get("org_policy") or {}
+        org_policy = (
+            OrgPolicy(
+                block_ids=set(org_cfg.get("block_ids", []) or []),
+                allow_ids=set(org_cfg.get("allow_ids", []) or []),
+            )
+            if org_cfg
+            else None
+        )
+
+        final_decision = resolve_decision(
+            extension_id=scoring_result.extension_id or "",
+            overall_score=scoring_result.overall_score,
+            security_score=scoring_result.security_score,
+            privacy_score=scoring_result.privacy_score,
+            governance_score=scoring_result.governance_score,
+            blocking_gates=blocking_gates,
+            warning_gates=warning_gates,
+            overall_confidence=scoring_result.overall_confidence,
+            insufficient_data=bool(getattr(scoring_result, "insufficient_data", False)),
+            baseline_block_reasons=baseline_block_reasons,
+            baseline_review_reasons=baseline_review_reasons,
+            org_policy=org_policy,
+        )
+        final_verdict = final_decision.verdict.value
+        logger.info(
+            "Final verdict (authority=%s): %s",
+            final_decision.authority,
+            final_verdict,
+        )
+
         # Compile governance bundle (includes Layer 0 SignalPack + Layer 1 Scorecards)
         governance_bundle = {
             # Layer 0: Signal Pack (new 3-layer architecture)
@@ -374,7 +429,12 @@ def governance_node(state: dict) -> Command:
             "report": report_dict,
             # Decision (combines rules engine + governance scorecard)
             "decision": {
-                # From rules engine
+                # FINAL verdict from the single Decision Authority (authoritative)
+                "final_verdict": final_verdict,
+                "final_authority": final_decision.authority,
+                "final_reasons": final_decision.reasons,
+                "insufficient_data": final_decision.insufficient_data,
+                # From rules engine (detail/audit)
                 "verdict": report.decision.verdict,
                 "rationale": report.decision.rationale,
                 "action_required": report.decision.action_required,
@@ -400,7 +460,7 @@ def governance_node(state: dict) -> Command:
             goto=CLEANUP_NODE,
             update={
                 "governance_bundle": governance_bundle,
-                "governance_verdict": report.decision.verdict,
+                "governance_verdict": final_verdict,
                 "governance_report": report_dict,
             },
         )

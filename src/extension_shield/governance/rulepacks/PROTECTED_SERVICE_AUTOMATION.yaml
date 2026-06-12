@@ -1,0 +1,99 @@
+rulepack_id: "PROTECTED_SERVICE_AUTOMATION"
+version: "1.0.0"
+name: "Protected Service Automation & Identity Exfiltration"
+description: >
+  Declarative rules detecting browser extensions that automate protected services
+  whose Terms of Use prohibit automated access (e.g. U.S. visa / travel-document
+  scheduling portals) and/or exfiltrate sensitive identity data. This rulepack
+  replaces the previously hardcoded visa/travel-doc heuristics in scoring/gates.py
+  and scoring/engine.py. Domain/pattern/keyword lists are defined declaratively in
+  config/protected_services.yaml and surfaced as signals by the SignalExtractor.
+
+rules:
+  # ==========================================================================
+  # BLOCK: automation of a protected service combined with capture/exfil
+  # ==========================================================================
+  - rule_id: "PROTECTED_SERVICE_AUTOMATION::R1"
+    name: "Protected Service Automation with Capture or Exfiltration"
+    description: >
+      Extension automates a protected service (ToS prohibits automation) AND
+      captures credentials, exfiltrates identity data, or screenshots the page.
+    condition: |
+      signals contains type="PROTECTED_SERVICE_AUTOMATION" AND
+      (signals contains type="CREDENTIAL_CAPTURE" OR
+       signals contains type="IDENTITY_DATA_EXFIL" OR
+       signals contains type="SCREENSHOT_CAPTURE")
+    verdict: "BLOCK"
+    confidence: 0.95
+    recommended_action: "Block — automates a protected portal and captures/exfiltrates sensitive data (ToS + privacy violation)"
+    citations: ["PROTECTED_SERVICE_AUTOMATION::TOS", "CWS_LIMITED_USE::SECTION_2"]
+    evidence_refs: []
+
+  # ==========================================================================
+  # BLOCK: credential / security-question capture on a protected service
+  # ==========================================================================
+  - rule_id: "PROTECTED_SERVICE_AUTOMATION::R2"
+    name: "Credential Capture on Protected Service"
+    description: >
+      Extension targets a protected service and captures or auto-fills login
+      credentials or security-question answers. Never acceptable for these portals.
+    condition: |
+      signals contains type="PROTECTED_SERVICE_DOMAIN" AND
+      signals contains type="CREDENTIAL_CAPTURE"
+    verdict: "BLOCK"
+    confidence: 0.9
+    recommended_action: "Block — captures government-portal credentials/security answers"
+    citations: ["PROTECTED_SERVICE_AUTOMATION::CREDENTIALS"]
+    evidence_refs: []
+
+  # ==========================================================================
+  # NEEDS_REVIEW: interception / capture on a protected service
+  # ==========================================================================
+  - rule_id: "PROTECTED_SERVICE_AUTOMATION::R3"
+    name: "API Interception on Protected Service"
+    description: "Extension intercepts the protected portal's own XHR/fetch API traffic."
+    condition: |
+      signals contains type="PROTECTED_SERVICE_DOMAIN" AND
+      signals contains type="XHR_INTERCEPTION"
+    verdict: "NEEDS_REVIEW"
+    confidence: 0.8
+    recommended_action: "Review — intercepts a protected portal's API responses"
+    citations: ["PROTECTED_SERVICE_AUTOMATION::INTERCEPTION"]
+    evidence_refs: []
+
+  - rule_id: "PROTECTED_SERVICE_AUTOMATION::R4"
+    name: "Screenshot Capture on Protected Service"
+    description: "Extension screenshots/rasterizes pages of a protected portal (may include identity documents)."
+    condition: |
+      signals contains type="PROTECTED_SERVICE_DOMAIN" AND
+      signals contains type="SCREENSHOT_CAPTURE"
+    verdict: "NEEDS_REVIEW"
+    confidence: 0.8
+    recommended_action: "Review — captures screenshots of a protected portal (possible passport/identity exposure)"
+    citations: ["PROTECTED_SERVICE_AUTOMATION::CAPTURE"]
+    evidence_refs: []
+
+  # ==========================================================================
+  # NEEDS_REVIEW: identity exfiltration and competitor sabotage
+  # ==========================================================================
+  - rule_id: "PROTECTED_SERVICE_AUTOMATION::R5"
+    name: "Identity Data Exfiltration to Third Party"
+    description: "Extension sends data to a known visa-slot ecosystem / external third-party endpoint."
+    condition: |
+      signals contains type="IDENTITY_DATA_EXFIL"
+    verdict: "NEEDS_REVIEW"
+    confidence: 0.75
+    recommended_action: "Review — sends data to an external third-party processor"
+    citations: ["PROTECTED_SERVICE_AUTOMATION::EXFIL", "CWS_LIMITED_USE::SECTION_4"]
+    evidence_refs: []
+
+  - rule_id: "PROTECTED_SERVICE_AUTOMATION::R6"
+    name: "Competitor Extension Sabotage"
+    description: "Extension shows indicators of deceptively sabotaging competitor extensions."
+    condition: |
+      signals contains type="COMPETITOR_SABOTAGE"
+    verdict: "NEEDS_REVIEW"
+    confidence: 0.7
+    recommended_action: "Review — deceptive manipulation of other extensions (CWS deceptive behavior policy)"
+    citations: ["PROTECTED_SERVICE_AUTOMATION::SABOTAGE"]
+    evidence_refs: []

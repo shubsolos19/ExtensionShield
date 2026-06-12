@@ -55,9 +55,19 @@ from extension_shield.scoring.explain import (
     FactorExplanation,
     LayerExplanation,
 )
+from extension_shield.scoring.decision import (
+    DecisionPolicy,
+    OrgPolicy,
+    resolve as resolve_decision,
+)
 
 
 logger = logging.getLogger(__name__)
+
+
+# Overall score is capped into the review band when analysis coverage is too low
+# to clear an extension as safe (no SAST / VirusTotal / network signals).
+INSUFFICIENT_DATA_SCORE_CAP = 65
 
 
 # =============================================================================
@@ -294,67 +304,103 @@ class ScoringEngine:
         # =====================================================================
         
         overall_score = overall_after_gates
-        
-        # Coverage sanity: cap overall_score when critical analyzers are missing.
-        # Missing SAST coverage must not look like a perfectly safe 100/100.
-        coverage_reasons: List[str] = []
+
+        # ---------------------------------------------------------------------
+        # Overall confidence (P1.2): layer-weighted average of layer confidences.
+        # NEVER defaults to 1.0 - empty/low-coverage scans must show low confidence.
+        # ---------------------------------------------------------------------
+        overall_confidence = round(
+            security_layer.confidence * layer_weights.get("security", 0.34)
+            + privacy_layer.confidence * layer_weights.get("privacy", 0.33)
+            + governance_layer.confidence * layer_weights.get("governance", 0.33),
+            3,
+        )
+
+        # ---------------------------------------------------------------------
+        # Coverage sanity caps
+        # ---------------------------------------------------------------------
+        extra_review_reasons: List[str] = []
         coverage_cap_applied = False
         coverage_cap_reason: Optional[str] = None
-        if sast_missing_coverage and overall_score > 80:
+
+        # Broad insufficient-data detection (P1.3): when NONE of the substantive
+        # code/threat analyzers produced coverage, manifest/permission metadata
+        # alone cannot clear an extension as safe. A zero-data extension must not
+        # look like a confident 80/100. Cap into the review band and force review.
+        sast_ran = (
+            signal_pack.sast.files_scanned > 0 or bool(signal_pack.sast.deduped_findings)
+        )
+        vt_available = (
+            signal_pack.virustotal.enabled and signal_pack.virustotal.total_engines > 0
+        )
+        network_ran = bool(getattr(signal_pack.network, "enabled", False))
+        insufficient_data = (not sast_ran) and (not vt_available) and (not network_ran)
+        insufficient_data_reason: Optional[str] = None
+
+        if insufficient_data:
+            insufficient_data_reason = (
+                "Insufficient analysis coverage (no SAST, VirusTotal, or network signals)"
+            )
+            if overall_score > INSUFFICIENT_DATA_SCORE_CAP:
+                overall_score = INSUFFICIENT_DATA_SCORE_CAP
+            extra_review_reasons.append(insufficient_data_reason)
+        elif sast_missing_coverage and overall_score > 80:
+            # SAST-only coverage gap (other analyzers present): cap at 80 + review.
             overall_score = 80
             coverage_cap_applied = True
             coverage_cap_reason = "SAST coverage missing; score capped at 80"
-            coverage_reasons.append(coverage_cap_reason)
-        
+            extra_review_reasons.append(coverage_cap_reason)
+
         logger.debug(
-            "Layer scores (after gate penalties): security=%d, privacy=%d, governance=%d, overall=%d",
+            "Layer scores (after gate penalties): security=%d, privacy=%d, "
+            "governance=%d, overall=%d, confidence=%.2f",
             security_score,
             privacy_score,
             governance_score,
             overall_score,
+            overall_confidence,
         )
-        
+
         # =====================================================================
         # STEP 5: Get gate results for decision making
         # =====================================================================
-        
+
         blocking_gates = self.gates.get_blocking_gates(gate_results)
         warning_gates = self.gates.get_warning_gates(gate_results)
-        
+
         triggered_gate_ids = [g.gate_id for g in blocking_gates + warning_gates]
-        
+
         if blocking_gates:
             logger.info(
                 "Hard gates triggered BLOCK: %s",
                 [g.gate_id for g in blocking_gates],
             )
-        
+
         # =====================================================================
-        # STEP 6: Determine final decision
+        # STEP 6: Final verdict via the single Decision Authority
+        # (scoring rungs only here; org/baseline-governance rungs are applied by
+        #  the governance node, which has rulepack results. Same precedence fn.)
         # =====================================================================
-        
-        decision, reasons = self._determine_decision(
+
+        final = resolve_decision(
+            extension_id=extension_id,
             overall_score=overall_score,
             security_score=security_score,
             privacy_score=privacy_score,
             governance_score=governance_score,
             blocking_gates=blocking_gates,
             warning_gates=warning_gates,
+            overall_confidence=overall_confidence,
+            insufficient_data=insufficient_data,
+            extra_review_reasons=extra_review_reasons,
         )
-        
-        # Apply coverage sanity: if coverage is limited and we didn't already
-        # BLOCK, ensure at least NEEDS_REVIEW and surface a clear reason.
-        if coverage_reasons:
-            for cr in coverage_reasons:
-                if cr not in reasons:
-                    reasons.append(cr)
-            if decision != Decision.BLOCK:
-                decision = Decision.NEEDS_REVIEW
-        
+        decision = final.verdict
+        reasons = list(final.reasons)
+
         # =====================================================================
         # STEP 7: Build final result
         # =====================================================================
-        
+
         result = ScoringResult(
             scan_id=scan_id,
             extension_id=extension_id,
@@ -382,6 +428,10 @@ class ScoringEngine:
             gate_reasons=gate_reasons_list or None,
             coverage_cap_applied=coverage_cap_applied,
             coverage_cap_reason=coverage_cap_reason,
+            overall_confidence=overall_confidence,
+            insufficient_data=insufficient_data,
+            insufficient_data_reason=insufficient_data_reason,
+            decision_authority=final.authority,
         )
         
         # Cache for explanation generation
@@ -703,80 +753,6 @@ class ScoringEngine:
             )
         
         return adjusted_security, adjusted_privacy, adjusted_governance
-    
-    def _determine_decision(
-        self,
-        overall_score: int,
-        security_score: int,
-        privacy_score: int,
-        governance_score: int,
-        blocking_gates: List[GateResult],
-        warning_gates: List[GateResult],
-    ) -> Tuple[Decision, List[str]]:
-        """
-        Determine final governance decision.
-        
-        Decision priority:
-        1. Any blocking gate → BLOCK
-        2. Security score < 30 → BLOCK
-        3. Overall score < 30 → BLOCK
-        4. Any warning gate → NEEDS_REVIEW
-        5. Security score < 75 → NEEDS_REVIEW
-        6. Overall score < 75 → NEEDS_REVIEW
-        7. All pass → ALLOW
-        
-        Args:
-            overall_score: Weighted overall score
-            security_score: Security layer score
-            privacy_score: Privacy layer score
-            governance_score: Governance layer score
-            blocking_gates: Gates that triggered BLOCK
-            warning_gates: Gates that triggered WARN
-            
-        Returns:
-            Tuple of (Decision, list of reasons)
-        """
-        reasons: List[str] = []
-        
-        # Priority 1: Blocking gates
-        if blocking_gates:
-            for gate in blocking_gates:
-                reasons.extend(gate.reasons[:2])
-            return Decision.BLOCK, reasons
-        
-        # Priority 2: Critical security score
-        if security_score < 30:
-            reasons.append(f"Security score {security_score}/100 critically low")
-            return Decision.BLOCK, reasons
-        
-        # Priority 3: Critical overall score
-        if overall_score < 30:
-            reasons.append(f"Overall score {overall_score}/100 critically low")
-            return Decision.BLOCK, reasons
-        
-        # Priority 4: Warning gates
-        if warning_gates:
-            for gate in warning_gates:
-                reasons.extend(gate.reasons[:2])
-            return Decision.NEEDS_REVIEW, reasons
-        
-        # Priority 5: Low security score
-        if security_score < 75:
-            reasons.append(f"Security score {security_score}/100 below threshold")
-            return Decision.NEEDS_REVIEW, reasons
-
-        # Priority 6: Low overall score
-        if overall_score < 75:
-            reasons.append(f"Overall score {overall_score}/100 below threshold")
-            if privacy_score < 75:
-                reasons.append(f"Privacy score {privacy_score}/100 contributing to low overall")
-            if governance_score < 75:
-                reasons.append(f"Governance score {governance_score}/100 contributing to low overall")
-            return Decision.NEEDS_REVIEW, reasons
-        
-        # Priority 7: All pass
-        reasons.append(f"All checks passed. Overall score: {overall_score}/100")
-        return Decision.ALLOW, reasons
     
     def _build_summary(
         self,

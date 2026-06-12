@@ -837,6 +837,8 @@ def _refresh_scan_payload_with_store_metadata(
         updated_payload["overall_confidence"] = scoring_v2.get("overall_confidence")
         updated_payload["decision_v2"] = scoring_v2.get("decision")
         updated_payload["decision_reasons_v2"] = scoring_v2.get("decision_reasons")
+        updated_payload["insufficient_data"] = scoring_v2.get("insufficient_data")
+        updated_payload["decision_authority"] = scoring_v2.get("decision_authority")
         updated_payload["overall_risk"] = scoring_v2.get(
             "risk_level",
             updated_payload.get("overall_risk", "unknown"),
@@ -1493,10 +1495,14 @@ async def run_analysis_workflow(url: str, extension_id: str):
                 "overall_confidence": scoring_result.overall_confidence,
                 "decision": scoring_result.decision.value,
                 "decision_reasons": scoring_result.reasons,
+                "insufficient_data": scoring_result.insufficient_data,
+                "decision_authority": scoring_result.decision_authority,
                 "hard_gates_triggered": scoring_result.hard_gates_triggered,
                 "risk_level": scoring_result.risk_level.value,
                 "explanation": scoring_result.explanation,
             }
+            if scoring_result.insufficient_data_reason is not None:
+                scoring_v2_payload["insufficient_data_reason"] = scoring_result.insufficient_data_reason
             if scoring_result.base_overall is not None:
                 scoring_v2_payload["base_overall"] = scoring_result.base_overall
             if scoring_result.gate_penalty is not None:
@@ -1547,6 +1553,8 @@ async def run_analysis_workflow(url: str, extension_id: str):
                 "overall_confidence": scoring_result.overall_confidence,
                 "decision_v2": scoring_result.decision.value,
                 "decision_reasons_v2": scoring_result.reasons,
+                "insufficient_data": scoring_result.insufficient_data,
+                "decision_authority": scoring_result.decision_authority,
                 # Full v2 scoring payload
                 "scoring_v2": scoring_v2_payload,
                 # Legacy helper outputs (kept for backward compatibility)

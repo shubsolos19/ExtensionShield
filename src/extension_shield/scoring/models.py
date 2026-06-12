@@ -333,7 +333,8 @@ class ScoringResult(BaseModel):
         default=None,
         ge=0,
         le=100,
-        description="Weighted layer sum before gate penalties (sec*0.5 + priv*0.3 + gov*0.2)"
+        description="Weighted layer sum before gate penalties using LAYER_WEIGHTS "
+                    "(sec*0.34 + priv*0.33 + gov*0.33)"
     )
     gate_penalty: Optional[int] = Field(
         default=None,
@@ -351,6 +352,18 @@ class ScoringResult(BaseModel):
     coverage_cap_reason: Optional[str] = Field(
         default=None,
         description="Reason for coverage cap when coverage_cap_applied is True"
+    )
+    insufficient_data: bool = Field(
+        default=False,
+        description="True when analysis coverage is too low to clear the extension as safe"
+    )
+    insufficient_data_reason: Optional[str] = Field(
+        default=None,
+        description="Reason coverage was deemed insufficient (e.g. no SAST/VT/network signals)"
+    )
+    decision_authority: Optional[str] = Field(
+        default=None,
+        description="Which rung of the decision authority produced the verdict (see scoring.decision)"
     )
 
     @computed_field
@@ -387,9 +400,9 @@ class ScoringResult(BaseModel):
         """
         Assemble a ScoringResult from pre-computed layers and a decision.
 
-        Decision logic is centralized in ``ScoringEngine._determine_decision``;
-        this method only aggregates layer scores and attaches the decision that
-        was already computed by the engine.
+        Decision logic is centralized in ``scoring.decision.resolve`` (the single
+        Decision Authority); this method only aggregates layer scores and attaches
+        the decision that was already computed by the engine.
 
         Args:
             scan_id: Unique scan identifier
@@ -407,9 +420,10 @@ class ScoringResult(BaseModel):
         """
         hard_gates = hard_gates_triggered or []
 
-        sec_weight = layer_weights.get("security", 0.5)
-        priv_weight = layer_weights.get("privacy", 0.3)
-        gov_weight = layer_weights.get("governance", 0.2)
+        # Defaults must match weights.LAYER_WEIGHTS (single source of truth).
+        sec_weight = layer_weights.get("security", 0.34)
+        priv_weight = layer_weights.get("privacy", 0.33)
+        gov_weight = layer_weights.get("governance", 0.33)
 
         overall_score = int(
             security_layer.score * sec_weight +
@@ -506,6 +520,12 @@ class ScoringResult(BaseModel):
             "is_blocked": self.is_blocked,
             "needs_review": self.needs_review,
             "reasons": self.reasons,
+            # Audit fields preserved so rebuild/upgrade paths stay consistent
+            # with freshly-scanned payloads (see ADR 0001).
+            "decision_reasons": self.reasons,
+            "overall_confidence": self.overall_confidence,
+            "insufficient_data": self.insufficient_data,
+            "decision_authority": self.decision_authority,
             "explanation": self.explanation,
             "hard_gates_triggered": self.hard_gates_triggered,
             "security_layer": self.security_layer.model_dump_for_api() if self.security_layer else None,
@@ -524,5 +544,7 @@ class ScoringResult(BaseModel):
             out["coverage_cap_applied"] = self.coverage_cap_applied
         if self.coverage_cap_reason is not None:
             out["coverage_cap_reason"] = self.coverage_cap_reason
+        if self.insufficient_data_reason is not None:
+            out["insufficient_data_reason"] = self.insufficient_data_reason
         return out
 

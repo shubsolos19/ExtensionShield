@@ -4,6 +4,7 @@ from extension_shield.governance.signal_pack import (
     SastFindingNormalized,
     SastSignalPack,
     SignalPack,
+    VirusTotalSignalPack,
 )
 from extension_shield.scoring.engine import ScoringEngine
 from extension_shield.scoring.gates import HardGates
@@ -46,6 +47,11 @@ def test_sast_missing_coverage_caps_score_and_sets_review():
     # Ensure SAST coverage is missing: default SastSignalPack has files_scanned == 0
     assert signal_pack.sast.files_scanned == 0
     assert signal_pack.sast.deduped_findings == []
+    # Provide VirusTotal coverage so this exercises the SAST-only cap (80), not the
+    # broader insufficient-data path (which applies only when SAST+VT+network are all absent).
+    signal_pack.virustotal = VirusTotalSignalPack(
+        enabled=True, malicious_count=0, total_engines=70
+    )
 
     engine = ScoringEngine()
     result = engine.calculate_scores(signal_pack, manifest={})

@@ -34,7 +34,7 @@ const CompareCrxplorerPage = () => {
               <strong>CRXplorer</strong> offers a single risk score, full source code viewer, and fast results. Its AI reads the code to produce a score, but the methodology and weights are not fully transparent. It does not document SAST, VirusTotal, or a dedicated governance/compliance layer.
             </p>
             <p>
-              <strong>ExtensionShield</strong> provides a <strong>chrome extension risk score</strong> (0–100) with three documented layers: Security (40%), Privacy (35%), and Governance (25%). We use Semgrep SAST, VirusTotal, obfuscation detection, and ChromeStats — plus a dedicated governance layer for ToS alignment and disclosure — so you can <strong>check if a chrome extension is safe</strong> with evidence you can cite. Ideal for <strong>browser extension security audit</strong> and <strong>extension risk assessment</strong>.
+              <strong>ExtensionShield</strong> provides a <strong>chrome extension risk score</strong> (0–100) with three documented, near-equally weighted layers: Security (34%), Privacy (33%), and Governance (33%), plus hard gates that override the score to BLOCK severe findings. We use Semgrep SAST, VirusTotal, obfuscation detection, and ChromeStats — plus a dedicated governance layer for ToS alignment and disclosure — so you can <strong>check if a chrome extension is safe</strong> with evidence you can cite. Ideal for <strong>browser extension security audit</strong> and <strong>extension risk assessment</strong>.
             </p>
             <ul>
               <li>Transparent three-layer scoring (Security / Privacy / Governance)</li>

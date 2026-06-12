@@ -34,7 +34,7 @@ const CompareExtensionAuditorPage = () => {
               <strong>ExtensionAuditor</strong> offers real-time permission analysis, color-coded risk, review sentiment, and CSV export. It runs as a browser extension (Chrome, Edge, Opera, Brave) and processes data on-device. Scoring methodology is not fully transparent, and it does not document SAST or VirusTotal integration.
             </p>
             <p>
-              <strong>ExtensionShield</strong> delivers a <strong>chrome extension risk score</strong> (0–100) with three documented layers: Security (40%), Privacy (35%), and Governance (25%). We combine a <strong>chrome extension permissions checker</strong> with SAST (Semgrep), VirusTotal, obfuscation detection, and a dedicated governance layer — so you can <strong>audit chrome extension security</strong> and support <strong>extension governance and compliance</strong>. Reports are evidence-based and audit-ready.
+              <strong>ExtensionShield</strong> delivers a <strong>chrome extension risk score</strong> (0–100) with three documented, near-equally weighted layers: Security (34%), Privacy (33%), and Governance (33%) — plus hard gates that override the score to BLOCK severe findings. We combine a <strong>chrome extension permissions checker</strong> with SAST (Semgrep), VirusTotal, obfuscation detection, and a dedicated governance layer — so you can <strong>audit chrome extension security</strong> and support <strong>extension governance and compliance</strong>. Reports are evidence-based and audit-ready.
             </p>
             <ul>
               <li>Transparent three-layer scoring and methodology</li>
