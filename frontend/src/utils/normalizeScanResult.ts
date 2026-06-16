@@ -494,6 +494,19 @@ function gateDecisionToBand(decision: string | null | undefined): ScoreBand | nu
 }
 
 /**
+ * Issue-level band for a layer: if any factor has an ISSUE-level severity
+ * (>= 0.4, the same threshold the LayerModal rows and the tile finding-count
+ * use), the layer tile must not present as "Safe". Returns WARN so the tile
+ * shows at least "Needs Review"; never downgrades (a BLOCK gate still wins via
+ * computeEffectiveBand). Returns null when the layer has no issue-level factor.
+ */
+function factorIssueBand(layer: RawLayerScore | null | undefined): ScoreBand | null {
+  const factors = layer?.factors;
+  if (!Array.isArray(factors)) return null;
+  return factors.some((f) => (f?.severity ?? 0) >= 0.4) ? 'WARN' : null;
+}
+
+/**
  * Compute effective band by combining score-based band with gate-based band
  * Uses ordering: GOOD < WARN < BAD
  * Returns the more severe of the two bands
@@ -1015,9 +1028,20 @@ export function normalizeScanResult(raw: RawScanResult): ReportViewModel {
   const governanceScoreBand = getLayerBand(scoringV2?.governance_layer, governanceScore);
   const overallScoreBand = getOverallBand();
   
-  const securityEffectiveBand = computeEffectiveBand(securityScoreBand, gateBandsByLayer.security);
-  const privacyEffectiveBand = computeEffectiveBand(privacyScoreBand, gateBandsByLayer.privacy);
-  const governanceEffectiveBand = computeEffectiveBand(governanceScoreBand, gateBandsByLayer.governance);
+  // Effective band = max(scoreBand, gateBand, factorIssueBand). The last term
+  // prevents a layer that lists an ISSUE-level row from rendering as "Safe".
+  const securityEffectiveBand = computeEffectiveBand(
+    computeEffectiveBand(securityScoreBand, gateBandsByLayer.security),
+    factorIssueBand(scoringV2?.security_layer),
+  );
+  const privacyEffectiveBand = computeEffectiveBand(
+    computeEffectiveBand(privacyScoreBand, gateBandsByLayer.privacy),
+    factorIssueBand(scoringV2?.privacy_layer),
+  );
+  const governanceEffectiveBand = computeEffectiveBand(
+    computeEffectiveBand(governanceScoreBand, gateBandsByLayer.governance),
+    factorIssueBand(scoringV2?.governance_layer),
+  );
 
   // The headline (overall) gauge MUST reflect the authoritative verdict, never
   // just the score. A BLOCK or NEEDS_REVIEW with a high score must not render as

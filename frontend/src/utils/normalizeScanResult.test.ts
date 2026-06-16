@@ -725,6 +725,88 @@ describe('normalizeScanResult - decision authority consistency', () => {
 });
 
 // =============================================================================
+// LAYER BAND <-> ISSUE ROW CONSISTENCY (Phase 1 follow-up)
+// A layer tile must not present as "Safe" (GOOD) when it lists an ISSUE-level
+// factor row (severity >= 0.4) — the threshold the LayerModal rows and the tile
+// finding-count both use.
+// =============================================================================
+
+describe('normalizeScanResult - layer band issue consistency', () => {
+  it('a privacy layer with an ISSUE-level factor is not GOOD/Safe', () => {
+    const raw: RawScanResult = {
+      extension_id: 'privacy-issue',
+      scoring_v2: {
+        decision: 'ALLOW',
+        overall_score: 90,
+        privacy_score: 80,
+        privacy_layer: {
+          layer_name: 'privacy',
+          score: 80,
+          risk_level: 'low', // GOOD by score/risk alone
+          factors: [
+            // e.g. Screen Capture flagged but layer score still high
+            { name: 'CaptureSignals', severity: 0.6, confidence: 0.8, weight: 0.15, contribution: 0.072 },
+          ],
+        },
+        security_layer: { factors: [] },
+        governance_layer: { factors: [] },
+      },
+    };
+    const result = normalizeScanResult(raw);
+    expect(result.scores.privacy.band).toBe('WARN');
+  });
+
+  it('a layer with only sub-threshold factors keeps its GOOD score band', () => {
+    const raw: RawScanResult = {
+      extension_id: 'privacy-clean',
+      scoring_v2: {
+        decision: 'ALLOW',
+        overall_score: 90,
+        privacy_score: 80,
+        privacy_layer: {
+          layer_name: 'privacy',
+          score: 80,
+          risk_level: 'low',
+          factors: [
+            { name: 'CaptureSignals', severity: 0.1, confidence: 0.8, weight: 0.15, contribution: 0.012 },
+          ],
+        },
+        security_layer: { factors: [] },
+        governance_layer: { factors: [] },
+      },
+    };
+    const result = normalizeScanResult(raw);
+    expect(result.scores.privacy.band).toBe('GOOD');
+  });
+
+  it('a BLOCK gate on a layer still wins over the issue bump (BAD, not WARN)', () => {
+    const raw: RawScanResult = {
+      extension_id: 'privacy-gate',
+      scoring_v2: {
+        decision: 'BLOCK',
+        overall_score: 80,
+        privacy_score: 80,
+        privacy_layer: {
+          layer_name: 'privacy',
+          score: 80,
+          risk_level: 'low',
+          factors: [
+            { name: 'CaptureSignals', severity: 0.6, confidence: 0.8, weight: 0.15, contribution: 0.072 },
+          ],
+        },
+        security_layer: { factors: [] },
+        governance_layer: { factors: [] },
+        gate_results: [
+          { gate_id: 'SENSITIVE_EXFIL', decision: 'BLOCK', triggered: true, confidence: 0.9, reasons: ['exfil'] },
+        ],
+      },
+    };
+    const result = normalizeScanResult(raw);
+    expect(result.scores.privacy.band).toBe('BAD');
+  });
+});
+
+// =============================================================================
 // RUNTIME ASSERTIONS (can be run independently)
 // =============================================================================
 

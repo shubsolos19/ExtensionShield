@@ -319,11 +319,21 @@
   background: var(--risk-warn-bg);
 }
 
+// Neutral "Not analyzed" status — no coverage, so neither safe nor flagged.
+.lm-status-unknown {
+  color: var(--theme-text-secondary);
+  border-color: var(--theme-border);
+  background: var(--theme-bg-tertiary);
+}
+
 .lm-check-card.lm-check-clear .lm-status-icon {
   color: var(--risk-good);
 }
 .lm-check-card.lm-check-issues .lm-status-icon {
   color: var(--risk-warn);
+}
+.lm-check-card.lm-check-unknown .lm-status-icon {
+  color: var(--theme-text-secondary);
 }
 
 // ---------------------------------------------------------------------------

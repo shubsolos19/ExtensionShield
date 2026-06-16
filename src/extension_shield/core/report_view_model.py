@@ -111,6 +111,40 @@ def _map_score_label_from_risk_level(risk_level: str) -> str:
     return "LOW RISK"
 
 
+def _normalize_verdict(decision: Any) -> str:
+    """
+    Map a scoring/governance decision to the authoritative verdict bucket.
+
+    Returns one of BLOCK | NEEDS_REVIEW | ALLOW | UNKNOWN. Accepts an enum
+    (with a .value), a string, or None.
+    """
+    val = getattr(decision, "value", decision)
+    s = str(val or "").upper()
+    if s == "BLOCK":
+        return "BLOCK"
+    if s in ("WARN", "NEEDS_REVIEW", "REVIEW"):
+        return "NEEDS_REVIEW"
+    if s == "ALLOW":
+        return "ALLOW"
+    return "UNKNOWN"
+
+
+def _reconcile_score_label(score_label: str, verdict: str) -> str:
+    """
+    Keep the score-derived risk label from contradicting the authoritative verdict.
+
+    The numeric score stays visible, but a BLOCK/NEEDS_REVIEW verdict must never
+    present as a lower-risk label (which is what produced "Review before
+    installing" / "appears safe" copy on a blocked extension). This only ever
+    raises the label, never lowers it.
+    """
+    if verdict == "BLOCK":
+        return "HIGH RISK"
+    if verdict == "NEEDS_REVIEW" and score_label == "LOW RISK":
+        return "MEDIUM RISK"
+    return score_label
+
+
 def _coerce_list(value: Any) -> List[Any]:
     if isinstance(value, list):
         return value
@@ -252,9 +286,16 @@ def build_consumer_summary(
     score = scorecard.get("score", 0)
     score_label = scorecard.get("score_label", "UNKNOWN")
     one_liner = scorecard.get("one_liner", "")
+    final_verdict = _normalize_verdict((scoring_v2 or {}).get("decision"))
 
     # --- Verdict (max 12 words) ---
-    if score_label == "HIGH RISK":
+    # Authoritative verdict owns the headline; score label only decides tone for
+    # ALLOW/unknown extensions. A BLOCK/NEEDS_REVIEW is stated unambiguously.
+    if final_verdict == "BLOCK":
+        verdict = "Blocked — do not install without review."
+    elif final_verdict == "NEEDS_REVIEW":
+        verdict = "Not safe yet — review unresolved risks before installing."
+    elif score_label == "HIGH RISK":
         verdict = one_liner if one_liner and len(one_liner.split()) <= 12 else "High risk — avoid unless necessary."
     elif score_label == "MEDIUM RISK":
         verdict = one_liner if one_liner and len(one_liner.split()) <= 12 else "Some caution needed before using this extension."
@@ -316,8 +357,13 @@ def build_consumer_summary(
         access_bullet = "No special data access detected."
 
     # --- What to do (1 bullet) ---
+    # Blocking/review verdicts take precedence over any softer "what to watch" hint.
     what_to_watch = highlights.get("what_to_watch", [])
-    if isinstance(what_to_watch, list) and what_to_watch:
+    if final_verdict == "BLOCK":
+        action_bullet = "Do not install without a manual security review."
+    elif final_verdict == "NEEDS_REVIEW":
+        action_bullet = "Do not treat as safe; review the flagged risks before installing."
+    elif isinstance(what_to_watch, list) and what_to_watch:
         action_bullet = str(what_to_watch[0])
     elif score_label == "HIGH RISK":
         action_bullet = "Avoid installing unless absolutely necessary."
@@ -366,6 +412,7 @@ def build_unified_consumer_summary(
     
     score = scorecard.get("score", 0)
     score_label = scorecard.get("score_label", "UNKNOWN")
+    verdict = _normalize_verdict((scoring_v2 or {}).get("decision"))
     host_access = evidence.get("host_access_summary", {})
     capability_flags = evidence.get("capability_flags", {})
     
@@ -562,6 +609,18 @@ def build_unified_consumer_summary(
                     raise ValueError("Summary contradicts LOW RISK score")
                 if score_label == "HIGH RISK" and any(x in text_to_check for x in ["safe", "low risk", "no concerns"]):
                     raise ValueError("Summary contradicts HIGH RISK score")
+                # The authoritative verdict overrides the score: a BLOCK/NEEDS_REVIEW
+                # extension must never be softened into review/safe wording.
+                if verdict == "BLOCK" and any(
+                    x in text_to_check
+                    for x in ["appears safe", "safe for general use", "review before installing",
+                              "needs some attention", "moderate issues", "no concerns"]
+                ):
+                    raise ValueError("Summary contradicts BLOCK verdict")
+                if verdict == "NEEDS_REVIEW" and any(
+                    x in text_to_check for x in ["appears safe", "safe for general use", "no concerns"]
+                ):
+                    raise ValueError("Summary contradicts NEEDS_REVIEW verdict")
 
                 logger.info("Unified consumer summary generated via LLM")
                 return {
@@ -584,6 +643,7 @@ def build_unified_consumer_summary(
         layer_details=layer_details,
         highlights=highlights,
         extension_name=ext_name,
+        verdict=verdict,
     )
 
 
@@ -595,15 +655,24 @@ def _fallback_unified_consumer_summary(
     layer_details: Dict[str, Any],
     highlights: Dict[str, Any],
     extension_name: str,
+    verdict: str = "UNKNOWN",
 ) -> Dict[str, Any]:
     """
     Deterministic fallback for unified consumer summary.
     Uses plain English and avoids technical jargon.
+
+    The authoritative ``verdict`` (BLOCK / NEEDS_REVIEW / ALLOW) takes precedence
+    over the numeric score label for the headline and recommendation so a blocked
+    extension is never described as "review"/"appears safe".
     """
     host_scope = host_access.get("host_scope_label", "NONE")
-    
-    # Headline based on score
-    if score_label == "HIGH RISK":
+
+    # Headline: authoritative verdict first, score label only as a fallback.
+    if verdict == "BLOCK":
+        headline = f"Not safe — {extension_name} was blocked by automated security checks."
+    elif verdict == "NEEDS_REVIEW":
+        headline = f"Do not install yet — {extension_name} has unresolved risks that need review."
+    elif score_label == "HIGH RISK":
         headline = f"Be careful — {extension_name} has significant security concerns."
     elif score_label == "MEDIUM RISK":
         headline = f"Review before installing — {extension_name} needs some attention."
@@ -630,7 +699,11 @@ def _fallback_unified_consumer_summary(
         tldr_parts.append("It can see and modify your web traffic.")
     
     if not tldr_parts:
-        if score_label == "LOW RISK":
+        if verdict == "BLOCK":
+            tldr_parts.append("This extension was blocked by automated security checks and is not considered safe to install.")
+        elif verdict == "NEEDS_REVIEW":
+            tldr_parts.append("This extension has unresolved risks that must be reviewed before it can be considered safe.")
+        elif score_label == "LOW RISK":
             tldr_parts.append("No major concerns were found during the security scan.")
         elif score_label == "MEDIUM RISK":
             tldr_parts.append("Some permissions and behaviors need review before installing.")
@@ -684,8 +757,12 @@ def _fallback_unified_consumer_summary(
         if isinstance(why_this_score, list):
             concerns = [_sanitize_concern(str(r)) for r in why_this_score if r and str(r).strip()][:3]
     
-    # Recommendation
-    if score_label == "HIGH RISK":
+    # Recommendation: authoritative verdict first.
+    if verdict == "BLOCK":
+        recommendation = "Do not install this extension without a manual security review; it was blocked by automated checks."
+    elif verdict == "NEEDS_REVIEW":
+        recommendation = "Do not treat this as safe yet — review the flagged risks before installing."
+    elif score_label == "HIGH RISK":
         recommendation = "Consider using an alternative extension with fewer permissions."
     elif score_label == "MEDIUM RISK":
         recommendation = "Check the permissions carefully and avoid using on sensitive websites."
@@ -1459,6 +1536,14 @@ def build_report_view_model(
     score_label = _map_score_label_from_risk_level(
         getattr(scoring_result, "risk_level", None).value if getattr(scoring_result, "risk_level", None) else ""
     )
+
+    # The authoritative verdict (governance Decision Authority) — not the numeric
+    # score — owns the headline tone. Reconcile the score label up to the verdict
+    # so all downstream copy (executive summary, scorecard, consumer summaries)
+    # cannot soften a BLOCK/NEEDS_REVIEW into "review"/"appears safe". The score
+    # number itself is unchanged and still rendered. (Phase 1 follow-up.)
+    verdict = _normalize_verdict(getattr(scoring_result, "decision", None))
+    score_label = _reconcile_score_label(score_label, verdict)
 
     # -------------------------------------------------------------------------
     # Deterministic context (for evidence + fallbacks)

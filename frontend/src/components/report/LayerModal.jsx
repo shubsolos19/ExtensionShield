@@ -49,7 +49,19 @@ const LAYER_CONFIG = {
   },
 };
 
-function humanizeFactor(factor) {
+/**
+ * A check whose underlying analysis did not run has no coverage and must not be
+ * shown as "Clear" (that overstates certainty). The network/exfil analyzer
+ * reports this via details.network_analysis_enabled === false.
+ */
+export function isNotAnalyzed(factor) {
+  const details = factor?.details;
+  if (!details || typeof details !== 'object') return false;
+  if (details.network_analysis_enabled === false) return true;
+  return false;
+}
+
+export function humanizeFactor(factor) {
   const info = FACTOR_HUMAN[factor.name] || {
     label: factor.name,
     category: 'other',
@@ -60,6 +72,9 @@ function humanizeFactor(factor) {
   if (severity >= 0.4) {
     status = 'Issue';
     statusType = 'issues';
+  } else if (isNotAnalyzed(factor)) {
+    status = 'Not analyzed';
+    statusType = 'unknown';
   } else {
     status = 'Clear';
     statusType = 'clear';
@@ -159,6 +174,8 @@ const LayerModal = ({
                         <span className="lm-status-wrap">
                           {item.statusType === 'clear' ? (
                             <CheckCircle className="lm-status-icon" size={14} strokeWidth={2} aria-hidden />
+                          ) : item.statusType === 'unknown' ? (
+                            <Info className="lm-status-icon" size={14} strokeWidth={2} aria-hidden />
                           ) : (
                             <AlertCircle className="lm-status-icon" size={14} strokeWidth={2} aria-hidden />
                           )}

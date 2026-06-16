@@ -59,6 +59,28 @@ const SummaryPanel = ({
     );
   };
 
+  // Placeholder copy must never soften the authoritative verdict: a BLOCK must
+  // read as blocked, a review verdict as unresolved — not "review before installing".
+  const getPlaceholderLines = () => {
+    const decision = scores?.decision;
+    if (decision === 'BLOCK') {
+      return [
+        'Blocked — do not install without a security review.',
+        'This extension failed automated security checks.',
+      ];
+    }
+    if (decision === 'WARN') {
+      return [
+        'Not safe yet — review unresolved risks before installing.',
+        'Avoid on sensitive sites (banking/email).',
+      ];
+    }
+    return [
+      'Review this extension before installing.',
+      'Avoid on sensitive sites (banking/email).',
+    ];
+  };
+
   if (showPlaceholder) {
     return (
       <section className="summary-panel summary-panel--unified">
@@ -71,8 +93,9 @@ const SummaryPanel = ({
         </div>
         <div className="summary-content">
           <div className="summary-placeholder-wrapper">
-            <p className="summary-placeholder-line">Review this extension before installing.</p>
-            <p className="summary-placeholder-line">Avoid on sensitive sites (banking/email).</p>
+            {getPlaceholderLines().map((line, idx) => (
+              <p key={idx} className="summary-placeholder-line">{line}</p>
+            ))}
           </div>
           {(onViewRiskyPermissions || onViewNetworkDomains) && (
             <div className="summary-action-buttons">
