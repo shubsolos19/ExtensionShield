@@ -1,5 +1,6 @@
 // ===========================================================================
-// LayerModal – Compact, decision-focused layer detail dialog
+// LayerModal — severity-triaged layer detail dialog
+// Issues first (loud) → Not analyzed (neutral) → Cleared (quiet).
 // ===========================================================================
 
 :root {
@@ -24,60 +25,50 @@
 }
 
 // ---------------------------------------------------------------------------
-// Container
+// Container — accent rail reflects the authoritative verdict, not the layer.
 // ---------------------------------------------------------------------------
 .lm-content {
+  --lm-accent: var(--risk-neutral);
+
   font-family: var(--report-font, var(--font-sans));
   background: var(--theme-bg-card);
   border: 1px solid var(--theme-border);
+  border-top: 3px solid var(--lm-accent);
   color: var(--theme-text-primary);
-  max-width: 420px;
+  max-width: 460px;
   width: 92vw;
-  max-height: 80vh;
+  max-height: 82vh;
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
   scrollbar-color: var(--theme-border-subtle) transparent;
   box-shadow: var(--theme-shadow-dropdown);
-  border-radius: var(--radius-lg, 12px);
+  border-radius: 14px;
   padding: 0;
   animation: lmSlideIn var(--lm-transition-duration) var(--lm-ease) both;
   display: flex;
   flex-direction: column;
   gap: 0;
 
-  &[data-layer="security"] {
-    border-left: 3px solid var(--risk-warn, #f59e0b);
-  }
-  &[data-layer="privacy"] {
-    border-left: 3px solid var(--risk-warn, #f59e0b);
-  }
-  &[data-layer="governance"] {
-    border-left: 3px solid var(--risk-good, #10b981);
-  }
+  &[data-band="GOOD"] { --lm-accent: var(--risk-good); }
+  &[data-band="WARN"] { --lm-accent: var(--risk-warn); }
+  &[data-band="BAD"]  { --lm-accent: var(--risk-bad); }
 }
 
 @keyframes lmSlideIn {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -48%) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
-  }
+  from { opacity: 0; transform: translate(-50%, -48%) scale(0.985); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
 // ---------------------------------------------------------------------------
-// Header: compact identity bar — icon + title left, verdict right
-// Override DialogHeader's default (flex-col, text-center) so content is row, left/right.
+// Header — identity left, verdict right
 // ---------------------------------------------------------------------------
 .lm-header-wrap {
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  text-align: center;
+  text-align: left;
   gap: 0;
   margin: 0;
   padding: 0;
@@ -89,19 +80,16 @@
   margin: 0;
   padding: 0;
   border: none;
-  font-size: inherit;
-  font-weight: inherit;
-  line-height: inherit;
+  font: inherit;
   letter-spacing: inherit;
-  tracking-tight: none;
 }
 
 .lm-header-inner {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   width: 100%;
-  padding: 16px 20px 14px;
+  padding: 18px 20px 16px;
   padding-right: 48px;
   border-bottom: 1px solid var(--theme-border-subtle);
   gap: 12px;
@@ -111,229 +99,236 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-shrink: 0;
+  min-width: 0;
 }
 
 .lm-header-inner .lm-icon {
-  font-size: 20px;
+  font-size: 19px;
   line-height: 1;
 }
 
 .lm-header-inner .lm-title {
-  font-size: 1.05rem;
-  font-weight: 600;
+  font-size: 1.0625rem;
+  font-weight: 650;
   color: var(--theme-text-primary);
   letter-spacing: -0.01em;
 }
 
+// Verdict pill — the layer's authoritative status, restated in the modal.
 .lm-verdict-pill {
+  flex-shrink: 0;
   font-size: 0.6875rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 5px 12px;
+  letter-spacing: 0.06em;
+  padding: 5px 11px;
   border-radius: var(--radius-full, 9999px);
   white-space: nowrap;
+  border: 1px solid transparent;
 }
-
-.lm-verdict-good {
-  color: var(--risk-good);
-  background: var(--risk-good-bg);
-  border: 1px solid var(--risk-good-border);
-}
-.lm-verdict-warn {
-  color: var(--risk-warn);
-  background: var(--risk-warn-bg);
-  border: 1px solid var(--risk-warn-border);
-}
-.lm-verdict-bad {
-  color: var(--risk-bad);
-  background: var(--risk-bad-bg);
-  border: 1px solid var(--risk-bad-border);
-}
-.lm-verdict-na {
-  color: var(--theme-text-muted);
-  background: var(--theme-bg-secondary);
-  border: 1px solid var(--theme-border);
-}
+.lm-verdict-good { color: var(--risk-good); background: var(--risk-good-bg); border-color: var(--risk-good-border); }
+.lm-verdict-warn { color: var(--risk-warn); background: var(--risk-warn-bg); border-color: var(--risk-warn-border); }
+.lm-verdict-bad  { color: var(--risk-bad);  background: var(--risk-bad-bg);  border-color: var(--risk-bad-border); }
+.lm-verdict-na   { color: var(--theme-text-muted); background: var(--theme-bg-secondary); border-color: var(--theme-border); }
 
 // ---------------------------------------------------------------------------
-// Body: no summary, checks only
-// ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
-// Body: no summary, checks only
+// Body — tiers stacked by severity
 // ---------------------------------------------------------------------------
 .lm-body {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  padding: 14px 20px 20px;
+  gap: 18px;
+  padding: 16px 20px 20px;
 }
 
-.lm-stats-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding-bottom: 12px;
-  margin-bottom: 12px;
-  border-bottom: 1px solid var(--theme-border-subtle);
-}
-
-.lm-stat {
+.lm-empty {
+  margin: 0;
+  padding: 8px 0;
   font-size: 0.8125rem;
   color: var(--theme-text-muted);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
 }
 
-.lm-stat-num {
+.lm-tier {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lm-tier-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lm-tier-title {
+  font-size: 0.6875rem;
   font-weight: 700;
-  color: var(--theme-text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--theme-text-muted);
+}
+
+.lm-tier--issues .lm-tier-title {
+  color: var(--risk-bad);
+}
+
+.lm-tier-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: 0.6875rem;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
+  color: var(--theme-text-secondary);
+  background: var(--theme-bg-tertiary);
+  border-radius: var(--radius-full, 9999px);
+
+  // Accent text on a tint (AA-safe), matching the verdict-pill treatment.
+  &--issues {
+    color: var(--risk-bad);
+    background: var(--risk-bad-bg);
+    border: 1px solid var(--risk-bad-border);
+  }
 }
 
-.lm-stat-issues .lm-stat-num {
-  color: var(--risk-warn);
+.lm-tier-note {
+  margin: 2px 0 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--theme-text-subtle);
 }
 
-.lm-stat-clear {
-  color: var(--risk-good);
-  font-weight: 600;
+.lm-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 // ---------------------------------------------------------------------------
-// Check groups: flat grid
+// Primary row — issues + not analyzed
 // ---------------------------------------------------------------------------
-.lm-checks {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
+.lm-check {
+  --row-accent: var(--risk-neutral);
+  --row-tint: var(--theme-bg-secondary);
 
-.lm-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  animation: lmFadeUp 0.3s var(--lm-ease) both;
-}
-
-.lm-group-label {
-  font-size: 0.625rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--theme-text-muted);
-  padding-left: 2px;
-}
-
-.lm-group-items {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-// Check card: full width row — label + info left, status right
-.lm-check-card {
-  display: flex;
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  justify-content: space-between;
-  width: 100%;
   gap: 10px;
-  padding: 7px 10px;
-  border-radius: var(--radius, 8px);
-  background: var(--theme-bg-secondary);
+  width: 100%;
+  padding: 11px 13px 11px 15px;
+  border-radius: var(--radius, 10px);
+  background: var(--row-tint);
   border: 1px solid var(--theme-border-subtle);
-  transition: background 0.15s ease, border-color 0.15s ease;
-  animation: lmFadeUp 0.25s var(--lm-ease) both;
-  box-sizing: border-box;
-
-  &:hover {
-    background: var(--theme-bg-tertiary);
-    border-color: var(--theme-border);
-  }
-
-  &.lm-check-issues {
-    border-color: var(--risk-warn-border);
-    background: var(--risk-warn-bg);
-    &:hover {
-      background: var(--risk-warn-bg);
-      border-color: var(--risk-warn-border);
-    }
-  }
-}
-
-.lm-check-left {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  flex: 1;
-}
-
-.lm-check-card .lm-check-name {
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--theme-text-primary);
-  line-height: 1.3;
-  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  animation: lmFadeUp 0.28s var(--lm-ease) both;
+
+  &.lm-tone-bad     { --row-accent: var(--risk-bad);  --row-tint: var(--risk-bad-bg); border-color: var(--risk-bad-border); }
+  &.lm-tone-warn    { --row-accent: var(--risk-warn); --row-tint: var(--risk-warn-bg); border-color: var(--risk-warn-border); }
+  &.lm-tone-neutral { --row-accent: var(--risk-neutral); --row-tint: var(--theme-bg-secondary); border-style: dashed; border-color: var(--theme-border); }
 }
 
-// Status: icon + short label (right-aligned in card)
-.lm-status-wrap {
+.lm-check-rail {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--row-accent);
+}
+
+.lm-check-glyph {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
+  justify-content: center;
+  color: var(--row-accent);
 }
 
-.lm-status-icon {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
+.lm-check-main {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  min-width: 0;
 }
 
-.lm-status {
+.lm-check-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+  line-height: 1.25;
+}
+
+.lm-check-tag {
   font-size: 0.625rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  padding: 3px 7px;
-  border-radius: 5px;
-  border: 1px solid;
-  white-space: nowrap;
-  color: var(--theme-text-primary);
-}
-
-.lm-status-clear {
-  color: var(--theme-text-primary);
-  border-color: var(--risk-good-border);
-  background: var(--risk-good-bg);
-}
-
-.lm-status-issues {
-  color: var(--theme-text-primary);
-  border-color: var(--risk-warn-border);
-  background: var(--risk-warn-bg);
-}
-
-// Neutral "Not analyzed" status — no coverage, so neither safe nor flagged.
-.lm-status-unknown {
-  color: var(--theme-text-secondary);
-  border-color: var(--theme-border);
+  letter-spacing: 0.05em;
+  color: var(--theme-text-muted);
+  padding: 2px 6px;
+  border-radius: 4px;
   background: var(--theme-bg-tertiary);
 }
 
-.lm-check-card.lm-check-clear .lm-status-icon {
-  color: var(--risk-good);
+.lm-check-status {
+  flex-shrink: 0;
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 9px;
+  border-radius: var(--radius-full, 9999px);
+  white-space: nowrap;
+  border: 1px solid transparent;
 }
-.lm-check-card.lm-check-issues .lm-status-icon {
-  color: var(--risk-warn);
+// Dark ink on a solid accent: loud, and AA-contrast on both amber and red in
+// either theme (white-on-amber failed WCAG).
+.lm-status-issues {
+  color: #1c1a17;
+  background: var(--row-accent);
+  font-weight: 800;
 }
-.lm-check-card.lm-check-unknown .lm-status-icon {
+.lm-status-unknown {
   color: var(--theme-text-secondary);
+  background: var(--theme-bg-tertiary);
+  border-color: var(--theme-border);
+}
+
+// ---------------------------------------------------------------------------
+// Cleared tier — quiet, dense, low-contrast (no green pill noise)
+// ---------------------------------------------------------------------------
+.lm-clear-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 16px;
+}
+
+.lm-clear-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 2px;
+  min-width: 0;
+}
+
+.lm-clear-tick {
+  color: var(--risk-good);
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+.lm-clear-name {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--theme-text-muted);
 }
 
 // ---------------------------------------------------------------------------
@@ -347,7 +342,7 @@
   color: var(--theme-text-muted);
   cursor: help;
   flex-shrink: 0;
-  opacity: 0.5;
+  opacity: 0.55;
   transition: opacity 0.15s ease, color 0.15s ease;
   outline: none;
   border-radius: 50%;
@@ -391,25 +386,13 @@
 }
 
 @keyframes lmTooltipIn {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
+  from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 @keyframes lmFadeUp {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 // ---------------------------------------------------------------------------
@@ -422,14 +405,16 @@
   }
   .lm-header-inner {
     flex-wrap: wrap;
+    justify-content: flex-start;
     gap: 8px;
     padding-right: 48px;
   }
-  .lm-group-items {
-    flex-direction: column;
+  .lm-verdict-pill {
+    align-self: flex-start;
   }
-  .lm-check-card {
-    width: 100%;
+  .lm-clear-grid {
+    grid-template-columns: 1fr;
+    gap: 2px;
   }
 }
 
@@ -457,66 +442,20 @@
   box-shadow: var(--theme-shadow-dropdown);
 }
 
-.light .lm-header {
-  border-bottom-color: var(--theme-border-subtle);
-  .lm-title { color: var(--theme-text-primary); }
-}
-
 .light .lm-header-inner {
   border-bottom-color: var(--theme-border-subtle);
 }
 
-.light .lm-stats-row {
-  border-bottom-color: var(--theme-border-subtle);
+.light .lm-check {
+  background: var(--row-tint, var(--theme-bg-secondary));
 }
 
-.light .lm-stat {
-  color: var(--theme-text-muted);
-}
-
-.light .lm-stat-num {
-  color: var(--theme-text-primary);
-}
-
-.light .lm-group-label {
-  color: var(--theme-text-muted);
-}
-
-.light .lm-check-card {
+.light .lm-check.lm-tone-neutral {
   background: var(--theme-bg-secondary);
-  border-color: var(--theme-border-subtle);
-  &:hover {
-    background: var(--theme-bg-tertiary);
-    border-color: var(--theme-border);
-  }
-  &.lm-check-issues {
-    background: var(--risk-warn-bg);
-    border-color: var(--risk-warn-border);
-  }
-}
-
-.light .lm-check-card .lm-check-name {
-  color: var(--theme-text-primary);
-}
-
-.light .lm-status-clear {
-  background: var(--risk-good-bg);
-  border-color: var(--risk-good-border);
-  color: var(--risk-good);
 }
 
 .light .lm-status-issues {
-  background: var(--risk-warn-bg);
-  border-color: var(--risk-warn-border);
-  color: var(--risk-warn);
-}
-
-.light .lm-info-trigger {
-  color: var(--extensionshield-text-muted);
-  &:hover,
-  &:focus-visible {
-    color: var(--extensionshield-text-secondary);
-  }
+  color: #fff;
 }
 
 .light .lm-info-tooltip {

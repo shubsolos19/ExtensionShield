@@ -786,7 +786,7 @@ const ScanResultsPageV2 = () => {
               <div className="results-v2-findings-count" aria-live="polite">
                 <span className="results-v2-findings-count-num">{totalFindingsCount}</span>
                 <span className="results-v2-findings-count-label">
-                  {totalFindingsCount === 1 ? 'finding' : 'findings'}
+                  {totalFindingsCount === 1 ? 'issue' : 'issues'}
                 </span>
               </div>
             )}

@@ -62,8 +62,9 @@ const ResultsSidebarTile = ({
           {getBandLabel()}
         </span>
         {findingsCount > 0 && (
-          <span className="tile-findings-badge">
-            {findingsCount} {findingsCount === 1 ? 'finding' : 'findings'}
+          <span className={`tile-findings-badge tile-findings-badge--${band.toLowerCase()}`}>
+            <span className="tile-findings-dot" aria-hidden />
+            {findingsCount} {findingsCount === 1 ? 'issue' : 'issues'}
           </span>
         )}
       </div>

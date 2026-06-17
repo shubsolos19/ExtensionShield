@@ -5,7 +5,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog';
-import { CheckCircle, AlertCircle, Info } from 'lucide-react';
+import { AlertTriangle, Check, HelpCircle, Info } from 'lucide-react';
 import './LayerModal.scss';
 
 const FACTOR_HUMAN = {
@@ -25,28 +25,20 @@ const FACTOR_HUMAN = {
   DisclosureAlignment:  { label: 'Disclosure Accuracy',   category: 'policy', desc: 'Validates privacy policy against actual data collection' },
 };
 
-const CATEGORY_LABELS = {
-  code:   'Code Checks',
-  threat: 'Threat Detection',
-  trust:  'Trust Signals',
+// Short, sentence-case tags used as a secondary caption on flagged/uncovered rows.
+const CATEGORY_TAG = {
+  code:   'Code',
+  threat: 'Threat',
+  trust:  'Trust',
   access: 'Permissions',
-  data:   'Data Handling',
-  policy: 'Policies',
+  data:   'Data',
+  policy: 'Policy',
 };
 
 const LAYER_CONFIG = {
-  security: {
-    title: 'Security',
-    icon: '🛡️',
-  },
-  privacy: {
-    title: 'Privacy',
-    icon: '🔒',
-  },
-  governance: {
-    title: 'Governance',
-    icon: '📋',
-  },
+  security:   { title: 'Security',   icon: '🛡️' },
+  privacy:    { title: 'Privacy',    icon: '🔒' },
+  governance: { title: 'Governance', icon: '📋' },
 };
 
 /**
@@ -61,6 +53,13 @@ export function isNotAnalyzed(factor) {
   return false;
 }
 
+/**
+ * Map a factor to a truthful presentation status:
+ *  - issues:  the check ran and found something material (severity >= 0.4).
+ *             tone splits high (>= 0.7 -> bad/red) vs moderate (warn/amber).
+ *  - unknown: the check could not run -> "Not analyzed" (never "Clear").
+ *  - clear:   the check ran and found nothing material.
+ */
 export function humanizeFactor(factor) {
   const info = FACTOR_HUMAN[factor.name] || {
     label: factor.name,
@@ -68,38 +67,57 @@ export function humanizeFactor(factor) {
     desc: '',
   };
   const severity = factor.severity ?? 0;
-  let status, statusType;
+  let status, statusType, tone;
   if (severity >= 0.4) {
-    status = 'Issue';
     statusType = 'issues';
+    tone = severity >= 0.7 ? 'bad' : 'warn';
+    status = severity >= 0.7 ? 'High risk' : 'Issue';
   } else if (isNotAnalyzed(factor)) {
-    status = 'Not analyzed';
     statusType = 'unknown';
+    tone = 'neutral';
+    status = 'Not analyzed';
   } else {
-    status = 'Clear';
     statusType = 'clear';
+    tone = 'good';
+    status = 'Clear';
   }
-  return { ...info, status, statusType, severity, raw: factor };
+  return { ...info, status, statusType, tone, severity, raw: factor };
 }
 
-function groupByCategory(items) {
-  const groups = {};
-  items.forEach(item => {
-    const cat = item.category || 'other';
-    if (!groups[cat]) groups[cat] = [];
-    groups[cat].push(item);
-  });
-  Object.values(groups).forEach(g => g.sort((a, b) => b.severity - a.severity));
-  return Object.entries(groups)
-    .sort(([, a], [, b]) => Math.max(...b.map(x => x.severity)) - Math.max(...a.map(x => x.severity)));
+/**
+ * Triage a layer's factors into severity tiers for display:
+ * issues (most severe first) -> not analyzed -> cleared (alphabetical).
+ * Keeping this pure makes the "issues first / not-analyzed distinct" ordering testable.
+ */
+export function triageFactors(factors = []) {
+  const humanised = (factors || []).map(humanizeFactor);
+  return {
+    all: humanised,
+    issues: humanised
+      .filter((i) => i.statusType === 'issues')
+      .sort((a, b) => b.severity - a.severity),
+    notAnalyzed: humanised.filter((i) => i.statusType === 'unknown'),
+    cleared: humanised
+      .filter((i) => i.statusType === 'clear')
+      .sort((a, b) => a.label.localeCompare(b.label)),
+  };
 }
 
 function bandLabel(band) {
   switch (band) {
     case 'GOOD': return 'Safe';
-    case 'WARN': return 'Needs Review';
-    case 'BAD':  return 'Not Safe';
-    default:     return '';
+    case 'WARN': return 'Needs review';
+    case 'BAD':  return 'Not safe';
+    default:     return 'Not rated';
+  }
+}
+
+function bandToneClass(band) {
+  switch (band) {
+    case 'GOOD': return 'lm-verdict-good';
+    case 'WARN': return 'lm-verdict-warn';
+    case 'BAD':  return 'lm-verdict-bad';
+    default:     return 'lm-verdict-na';
   }
 }
 
@@ -117,10 +135,37 @@ const InfoTooltip = ({ text }) => {
   );
 };
 
+/** Prominent row for a flagged or uncovered check (issues + not-analyzed tiers). */
+const PrimaryCheckRow = ({ item, index }) => (
+  <div
+    className={`lm-check lm-check--${item.statusType} lm-tone-${item.tone}`}
+    style={{ animationDelay: `${index * 30}ms` }}
+    role="listitem"
+  >
+    <span className="lm-check-rail" aria-hidden />
+    <span className="lm-check-glyph" aria-hidden>
+      {item.statusType === 'issues'
+        ? <AlertTriangle size={15} strokeWidth={2.25} />
+        : <HelpCircle size={15} strokeWidth={2.25} />}
+    </span>
+    <span className="lm-check-main">
+      <span className="lm-check-name">
+        {item.label}
+        {item.desc && <InfoTooltip text={item.desc} />}
+      </span>
+      {CATEGORY_TAG[item.category] && (
+        <span className="lm-check-tag">{CATEGORY_TAG[item.category]}</span>
+      )}
+    </span>
+    <span className={`lm-check-status lm-status-${item.statusType}`}>{item.status}</span>
+  </div>
+);
+
 const LayerModal = ({
   open,
   onClose,
   layer,
+  // eslint-disable-next-line no-unused-vars
   score = null,
   band = 'NA',
   factors = [],
@@ -130,18 +175,20 @@ const LayerModal = ({
   gateResults = [],
   // eslint-disable-next-line no-unused-vars
   layerReasons = [],
+  // eslint-disable-next-line no-unused-vars
   layerDetails = null,
   // eslint-disable-next-line no-unused-vars
   onViewEvidence = null,
 }) => {
   const config = LAYER_CONFIG[layer] || LAYER_CONFIG.security;
 
-  const humanised = factors.map(humanizeFactor);
-  const grouped = groupByCategory(humanised);
+  // Severity-first triage: what's wrong, then what couldn't be checked, then what's fine.
+  const { all, issues, notAnalyzed, cleared } = triageFactors(factors);
+  const hasChecks = all.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="lm-content lm-dialog-smooth" aria-describedby="lm-checks" aria-label={`${config.title} details`} data-layer={layer}>
+      <DialogContent className="lm-content lm-dialog-smooth" aria-describedby="lm-checks" aria-label={`${config.title} details`} data-layer={layer} data-band={band}>
         <DialogHeader className="lm-header-wrap">
           <DialogTitle className="lm-header">
             <div className="lm-header-inner">
@@ -149,46 +196,61 @@ const LayerModal = ({
                 <span className="lm-icon" aria-hidden>{config.icon}</span>
                 <span className="lm-title">{config.title}</span>
               </div>
+              <span className={`lm-verdict-pill ${bandToneClass(band)}`}>{bandLabel(band)}</span>
             </div>
           </DialogTitle>
         </DialogHeader>
 
         <div className="lm-body" id="lm-checks">
-          {grouped.length > 0 && (
-            <div className="lm-checks" role="list" aria-label={`${config.title} checks`}>
-              {grouped.map(([cat, items], catIdx) => (
-                <div key={cat} className="lm-group" style={{ animationDelay: `${catIdx * 40}ms` }} role="group" aria-label={CATEGORY_LABELS[cat] || cat}>
-                  <span className="lm-group-label">{CATEGORY_LABELS[cat] || cat}</span>
-                  <div className="lm-group-items">
-                    {items.map((item, idx) => (
-                      <div
-                        key={idx}
-                        className={`lm-check-card lm-check-${item.statusType}`}
-                        style={{ animationDelay: `${(catIdx * 40 + (idx + 1) * 25)}ms` }}
-                        role="listitem"
-                      >
-                        <div className="lm-check-left">
-                          <span className="lm-check-name">{item.label}</span>
-                          {item.desc && <InfoTooltip text={item.desc} />}
-                        </div>
-                        <span className="lm-status-wrap">
-                          {item.statusType === 'clear' ? (
-                            <CheckCircle className="lm-status-icon" size={14} strokeWidth={2} aria-hidden />
-                          ) : item.statusType === 'unknown' ? (
-                            <Info className="lm-status-icon" size={14} strokeWidth={2} aria-hidden />
-                          ) : (
-                            <AlertCircle className="lm-status-icon" size={14} strokeWidth={2} aria-hidden />
-                          )}
-                          <span className={`lm-status lm-status-${item.statusType}`}>
-                            {item.status}
-                          </span>
-                        </span>
-                      </div>
-                    ))}
+          {!hasChecks && (
+            <p className="lm-empty">No checks are available for this layer.</p>
+          )}
+
+          {issues.length > 0 && (
+            <section className="lm-tier lm-tier--issues" aria-label="Issues found">
+              <header className="lm-tier-head">
+                <span className="lm-tier-title">Issues found</span>
+                <span className="lm-tier-count lm-tier-count--issues">{issues.length}</span>
+              </header>
+              <div className="lm-rows" role="list">
+                {issues.map((item, idx) => (
+                  <PrimaryCheckRow key={`i-${idx}`} item={item} index={idx} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {notAnalyzed.length > 0 && (
+            <section className="lm-tier lm-tier--unknown" aria-label="Not analyzed">
+              <header className="lm-tier-head">
+                <span className="lm-tier-title">Not analyzed</span>
+                <span className="lm-tier-count">{notAnalyzed.length}</span>
+              </header>
+              <div className="lm-rows" role="list">
+                {notAnalyzed.map((item, idx) => (
+                  <PrimaryCheckRow key={`u-${idx}`} item={item} index={idx} />
+                ))}
+              </div>
+              <p className="lm-tier-note">Coverage unavailable — treat as unknown, not safe.</p>
+            </section>
+          )}
+
+          {cleared.length > 0 && (
+            <section className="lm-tier lm-tier--clear" aria-label="Checks that passed">
+              <header className="lm-tier-head">
+                <span className="lm-tier-title">Cleared</span>
+                <span className="lm-tier-count">{cleared.length}</span>
+              </header>
+              <div className="lm-clear-grid" role="list">
+                {cleared.map((item, idx) => (
+                  <div className="lm-clear-row" key={`c-${idx}`} role="listitem">
+                    <Check className="lm-clear-tick" size={13} strokeWidth={2.5} aria-hidden />
+                    <span className="lm-clear-name">{item.label}</span>
+                    {item.desc && <InfoTooltip text={item.desc} />}
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </section>
           )}
         </div>
       </DialogContent>

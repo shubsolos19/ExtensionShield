@@ -213,18 +213,24 @@ const GATE_HUMAN_TITLE: Record<string, string> = {
   CAPTURE_SIGNALS: 'May capture your screen or input',
 };
 
+// Keys MUST match the backend FactorName strings (scoring/weights.py). Labels
+// are kept consistent with LayerModal's FACTOR_HUMAN so a factor reads the same
+// in Key Findings and in the layer modal.
 const FACTOR_HUMAN_TITLE: Record<string, string> = {
-  SAST: 'Code security scan',
-  VirusTotal: 'Antivirus scan',
-  Entropy: 'Code obfuscation check',
-  ManifestPosture: 'Extension configuration',
-  ChromeStats: 'Chrome Web Store reputation',
-  WebStoreTrust: 'Developer trust signals',
-  MaintenanceHealth: 'Update & maintenance status',
-  PermissionsBaseline: 'Permission risk level',
-  PermissionCombos: 'Risky permission combinations',
-  NetworkExfil: 'Data sent to external servers',
-  CaptureSignals: 'Screen or input capture',
+  SAST: 'Code Safety',
+  VirusTotal: 'Malware Scan',
+  Obfuscation: 'Hidden Code',
+  Manifest: 'Extension Config',
+  ChromeStats: 'Threat Intel',
+  Webstore: 'Store Reputation',
+  Maintenance: 'Update Freshness',
+  PermissionsBaseline: 'Permission Risk',
+  PermissionCombos: 'Dangerous Combos',
+  NetworkExfil: 'Data Sharing',
+  CaptureSignals: 'Screen Capture',
+  ToSViolations: 'Policy Violations',
+  Consistency: 'Behavior Match',
+  DisclosureAlignment: 'Disclosure Accuracy',
 };
 
 const SAST_HUMAN_TITLE: Record<string, string> = {
