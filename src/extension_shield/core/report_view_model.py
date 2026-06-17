@@ -386,6 +386,7 @@ def build_unified_consumer_summary(
     analysis_results: Optional[Dict[str, Any]] = None,
     manifest: Optional[Dict[str, Any]] = None,
     extension_name: Optional[str] = None,
+    skip_llm: bool = False,
 ) -> Dict[str, Any]:
     """
     Build a unified, LLM-powered consumer summary with plain English insights.
@@ -419,7 +420,21 @@ def build_unified_consumer_summary(
     # Build the name
     meta = report_view_model.get("meta", {})
     ext_name = extension_name or meta.get("name", "This extension")
-    
+
+    # Retrieval/skip paths must not call the LLM (avoids network dependency and
+    # latency). Use the deterministic, verdict-aware fallback directly.
+    if skip_llm:
+        return _fallback_unified_consumer_summary(
+            score=score,
+            score_label=score_label,
+            host_access=host_access,
+            capability_flags=capability_flags,
+            layer_details=layer_details,
+            highlights=highlights,
+            extension_name=ext_name,
+            verdict=verdict,
+        )
+
     # Try LLM-powered generation first
     try:
         prompts = get_prompts("summary_generation")
@@ -1736,18 +1751,20 @@ def build_report_view_model(
     # -------------------------------------------------------------------------
     # Layer Details Generation (LLM with deterministic fallback)
     # -------------------------------------------------------------------------
+    # Gate results feed both the LLM generator and the deterministic fallback.
+    gate_results = []
+    if scoring_result and hasattr(scoring_engine, '_last_gate_results'):
+        gate_results = scoring_engine._last_gate_results or []
+
     # Prefer already-computed pipeline outputs to avoid duplicate LLM calls.
+    # When skip_llm=True (retrieval path), never call the LLM - use the
+    # deterministic fallback below.
     layer_details_raw: Any = (
         analysis_results.get("layer_details")
         or analysis_results.get("layerDetails")
     )
-    if not (isinstance(layer_details_raw, dict) and layer_details_raw):
+    if not (isinstance(layer_details_raw, dict) and layer_details_raw) and not skip_llm:
         try:
-            # Extract gate results for layer details generation
-            gate_results = []
-            if scoring_result and hasattr(scoring_engine, '_last_gate_results'):
-                gate_results = scoring_engine._last_gate_results or []
-            
             layer_details_generator = LayerDetailsGenerator()
             layer_details_raw = layer_details_generator.generate(
                 scoring_result=scoring_result,
@@ -1758,7 +1775,7 @@ def build_report_view_model(
         except Exception:
             layer_details_raw = None
 
-    # Use deterministic fallback if LLM failed
+    # Use deterministic fallback if LLM was skipped or failed
     layer_details = (
         layer_details_raw
         if isinstance(layer_details_raw, dict) and layer_details_raw
@@ -1766,7 +1783,7 @@ def build_report_view_model(
             scoring_result=scoring_result,
             analysis_results=analysis_results,
             manifest=manifest,
-            gate_results=gate_results if 'gate_results' in locals() else [],
+            gate_results=gate_results,
         )
     )
 
@@ -1853,6 +1870,7 @@ def build_report_view_model(
         analysis_results=analysis_results,
         manifest=manifest,
         extension_name=manifest.get("name") or metadata.get("title") or metadata.get("name"),
+        skip_llm=skip_llm,
     )
 
     return report_view_model
