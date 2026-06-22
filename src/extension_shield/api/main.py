@@ -1725,11 +1725,8 @@ def get_extracted_files(extracted_path: Optional[str]) -> list[str]:
     return files
 
 
-# Legacy scoring functions moved to scoring_legacy.py.
-# Re-exported here for backward compatibility with tests and callers.
+# Legacy scoring helpers (used by the scan-result builder below).
 from extension_shield.api.scoring_legacy import (  # noqa: E402
-    calculate_security_score,
-    determine_overall_risk,
     count_total_findings,
     calculate_total_risk_score,
 )

@@ -68,4 +68,4 @@ Migrations in `migrations/` are applied in filename order:
 - `20260206031453_add_user_profiles_karma.sql` — user_profiles, karma trigger
 - `20260210200000_scan_time_tracking.sql` — first/previous scan time and state
 
-Full schema details: [docs/SCHEMA_REFERENCE.md](../docs/SCHEMA_REFERENCE.md).
+Full schema details: the migrations listed above plus the consolidated SQL in [`supabase/schemas/`](schemas/).

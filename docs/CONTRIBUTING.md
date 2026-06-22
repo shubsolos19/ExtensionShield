@@ -224,10 +224,10 @@ cd frontend && npm run format && npm run lint
 <details>
 <summary><strong>Checklist</strong></summary>
 
-1. **Ensure CI passes.** All PRs must pass linting, tests, secret scanning, and dependency audits.
-2. **Fill out the PR template.** Describe what changed and why.
+1. **Ensure CI passes.** PRs run Python tests, frontend lint/tests/build, secret scanning, and dependency audits.
+2. **Describe your change.** Explain what changed and why in the PR description.
 3. **Keep PRs focused.** One logical change per PR. Large refactors should be discussed in an issue first.
-4. **Request a review.** Tag a maintainer or let CODEOWNERS auto-assign.
+4. **Request a review.** Tag a maintainer.
 5. **Address feedback.** Push fixup commits, then squash before merge if requested.
 </details>
 

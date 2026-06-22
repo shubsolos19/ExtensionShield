@@ -66,7 +66,7 @@ Install the **ExtensionShield Chrome extension** to manage your extensions from 
 
 ExtensionShield scans Chrome extensions, runs security and privacy analysis, and produces risk scores and summary reports.
 
-Optional cloud features such as auth, history, team monitoring, and community queue are available via <a href="https://extensionshield.com" style="color:#2ea043;">ExtensionShield Cloud</a>.
+Optional cloud features such as auth, history, team dashboards, and community queue are available via <a href="https://extensionshield.com" style="color:#2ea043;">ExtensionShield Cloud</a>.
 
 ---
 

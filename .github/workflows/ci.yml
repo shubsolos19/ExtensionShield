@@ -74,7 +74,7 @@ jobs:
           echo ".env.example looks clean"
 
   frontend-check:
-    name: Frontend Build Check
+    name: Frontend Lint, Test & Build
     runs-on: ubuntu-latest
 
     steps:
@@ -93,6 +93,14 @@ jobs:
       - name: Copy env example
         working-directory: frontend
         run: cp .env.example .env
+
+      - name: Lint frontend
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Test frontend
+        working-directory: frontend
+        run: npm test -- --run
 
       - name: Build frontend (OSS mode)
         working-directory: frontend

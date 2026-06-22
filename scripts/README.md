@@ -45,15 +45,10 @@ Use these when you need to run something outside the usual `make` targets (e.g. 
 - **debug-magic-link.mjs** — Helps debug magic-link sign-in. `node scripts/debug-magic-link.mjs your@email.com`.
 - **supabase-set-smtp.mjs** — Configures SMTP in Supabase for auth emails. Run from project root when setting up a new project.
 
-**Other**
+**Diagnostics (run by hand)**
 
-- **generate_hero_snapshot.js** — Regenerates the hero carousel data from the API. Run from root: `node scripts/generate_hero_snapshot.js`. Frontend reads from `frontend/src/data/heroSnapshot.js`.
-- **benchmark_scanners.py** — Export ExtensionShield scan data (and optionally CRXplorer/Extension Auditor) for benchmarking. From root: `uv run python scripts/benchmark_scanners.py --output data/scanner_benchmark.json`. Use `--crxplorer` to fetch CRXplorer per extension; use `--from-excel docs/qa_extensionshield/qa_scoring_export.xlsx` to run against the same extension list as the QA Excel (ensures alignment with Supabase and Excel).
-- **export_qa_scoring_excel.py** — Exports all completed scans from the database to Excel for QA and Crxplorer comparison. Writes to `docs/qa_extensionshield/qa_scoring_export.xlsx` by default. From root: `uv run python scripts/export_qa_scoring_excel.py`. Use `--all` to include every completed scan (ignore visibility/source filter). Use `--out path.xlsx` to override output path.
-- **fetch_extensionauditor_bulk.py** — Fetches ExtensionAuditor bulk-analysis results for extensions in the QA export and merges them into the Excel. Set `EXTENSIONAUDITOR_API_KEY` in the environment (or `.env`), then from root: `uv run python scripts/fetch_extensionauditor_bulk.py`. Updates the export in place and writes a finalized report to `docs/qa_extensionshield/qa_scoring_final.xlsx`. Use `--limit N` to process only N extensions; use `--no-in-place` to only write the output file without modifying the export.
-- **fetch_extensionauditor_scrape.py** — **Scrape** Extension Auditor’s scan page with a real browser (Playwright): open their site, enter each extension URL, run scan, and extract risk/verdict. Use when the API returns 500 or is unavailable. From root: `uv run python scripts/fetch_extensionauditor_scrape.py` (optional: `--limit 5 --headed`). Requires Playwright: `uv sync --group dev` then `playwright install chromium`. `--headed` shows the browser and often helps avoid Cloudflare blocks.
-- **qa_verify_scoring_from_excel.py** — Reads the QA export Excel, fetches each extension’s Chrome Web Store listing, and produces a verification report (name check, our score vs store rating/users). From root: `uv run python scripts/qa_verify_scoring_from_excel.py` (optional: `--limit 5`, `--out docs/qa_extensionshield/qa_scoring_verification_report.md`).
-- **qa_regression_scoring.py** — Compares a baseline list (CSV or Excel) to the current export to detect missing extensions or score/decision changes. From root: `uv run python scripts/qa_regression_scoring.py --baseline docs/qa_extensionshield/qa_scoring_verification_report.csv --current docs/qa_extensionshield/qa_scoring_export.xlsx` (add `--strict` to fail on score/decision changes).
+- **check_local_db_backend.py** — Reports which database backend the API uses (SQLite vs Supabase) and where scans are stored. From root: `uv run python scripts/check_local_db_backend.py`.
+- **verify_openai_api.py** — Validates `OPENAI_API_KEY` format and connectivity with a minimal OpenAI call. From root: `uv run python scripts/verify_openai_api.py`.
 
 ---
 

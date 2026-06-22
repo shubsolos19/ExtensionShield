@@ -6,4 +6,4 @@ The scanner web UI is part of the open core. Canonical source:
 
 In OSS mode the UI works without sign-in; cloud-only features (history, karma, review queue, enterprise forms) are hidden or disabled and the API returns HTTP 501 for those routes.
 
-See [OPEN_CORE_BOUNDARIES.md](../docs/OPEN_CORE_BOUNDARIES.md).
+See [OPEN_CORE_BOUNDARIES.md](../../docs/OPEN_CORE_BOUNDARIES.md).

@@ -15,4 +15,4 @@ Implementation locations:
 - `../src/extension_shield/api/main.py` — Cloud-only routes use `require_cloud_dep("feature_name")`; they return 501 in OSS mode.
 - `../scripts/cloud_only/` — Supabase migrations and cloud-only scripts.
 
-**Enforcement**: All cloud-only routes declare `dependencies=[require_cloud_dep("...")]` so the guard runs before any handler; in OSS mode no Supabase calls are made. See [OPEN_CORE_BOUNDARIES.md](../docs/OPEN_CORE_BOUNDARIES.md).
+**Enforcement**: All cloud-only routes declare `dependencies=[require_cloud_dep("...")]` so the guard runs before any handler; in OSS mode no Supabase calls are made. See [OPEN_CORE_BOUNDARIES.md](../../docs/OPEN_CORE_BOUNDARIES.md).

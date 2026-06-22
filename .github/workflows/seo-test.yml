@@ -64,7 +64,7 @@ jobs:
             - robots.txt is configured correctly
             - sitemap.xml only contains canonical domain URLs
             
-            See \`docs/SEO_GATE.md\` for details.`;
+            Review the failing checks in the workflow logs above.`;
             
             github.rest.issues.createComment({
               issue_number: context.issue.number,
